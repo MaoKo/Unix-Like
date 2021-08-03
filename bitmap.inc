@@ -392,6 +392,20 @@ _bitmap_bit_count_table:
     db 3H, 4H, 4H, 5H, 4H, 5H, 5H, 6H, 4H, 5H, 5H, 6H, 5H, 6H, 6H, 7H
     db 4H, 5H, 5H, 6H, 5H, 6H, 6H, 7H, 5H, 6H, 6H, 7H, 6H, 7H, 7H, 8H
 
+_bitmap_init:
+ ; in:
+ ;  eax - bitmap pointer object
+ ;  ebx - expansion kind
+ ;  ecx - bitmap size
+ ; out: same as _bitmap_resize
+ ; preserves: eax, esi, ebp
+    mov edi, ebx
+    lea ebx, [eax+_bitmap.table]
+    lea edx, [ebx-_BITMAP_UNIT]
+    mov dword [eax+_bitmap.next], ebx
+    mov dword [eax+_bitmap.last], edx
+    ; fallthrough ;
+
 enum _BITMAP_EXPAND_ZERO, _BITMAP_EXPAND_ONE
 _bitmap_resize:
  ; in:
@@ -416,7 +430,7 @@ _bitmap_resize:
     jns _bitmap_resize_expand
     add dword [eax+_bitmap.last], ecx
     xor ebx, ebx
-    mov edx, edx
+    mov edx, ebx
     call _bitmap_bit_count
     mov dword [eax+_bitmap.free], ecx
     mov edi, dword [eax+_bitmap.last]

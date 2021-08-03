@@ -407,7 +407,7 @@ _teletype_write_character_foreach_btst:
 _teletype_write_character_foreach_save_all:
     bt ax, dx
     pusha
-    call dword [esp+_PUSHA_ALL]
+    call dword [esp+_PUSHA_TOTAL]
     mov dword [esp+_PUSHA_EDI], edi
     popa
 _teletype_write_character_foreach_decrement:

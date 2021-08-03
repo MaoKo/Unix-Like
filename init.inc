@@ -1,7 +1,35 @@
 
 virtual at _USER_CODE_VIRTUAL
 _init::
-    mov eax, _SYSCALL_FORK
+    xor eax, eax
+    mov al, _SYSCALL_SHA1
+    int 030H
+
+    ;xor eax, eax
+    ;mov al, _SYSCALL_AESENC_ECB
+    ;lea ebx, [esp-010H]
+    ;mov dword [ebx], "HELO"
+    ;mov ebx, _aes_test
+    ;mov ecx, 010H
+    ;mov edx, _aes_key
+    ;int 030H
+
+    jmp $
+
+_aes_test:
+    db 032H, 088H, 031H, 0E0H
+    db 043H, 05AH, 031H, 037H
+    db 0F6H, 030H, 098H, 007H
+    db 0A8H, 08DH, 0A2H, 034H
+
+_aes_key:
+    db 02BH, 028H, 0ABH, 009H
+    db 07EH, 0AEH, 0F7H, 0CFH
+    db 015H, 0D2H, 015H, 04FH
+    db 016H, 0A6H, 088H, 03CH
+
+    xor eax, eax
+    mov al, _SYSCALL_FORK
     int 030H
     test eax, eax
     jnz _init_parent

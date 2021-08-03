@@ -12,4 +12,4 @@ def _dump_2th_paging(address):
     print("PAGE DIRECTORY INDEX =", hex((address >> 0x15) & 0x1FF));
     print("PAGE DIRECTORY POINTER INDEX =", hex((address >> 0x1E) & 0x3));
 
-_dump_1th_paging(0xfffffc00)
+_dump_2th_paging(0x0007ff00)

@@ -32,7 +32,7 @@ ends
 
 virtual at _USER_CODE_VIRTUAL
 _shell::
-    rept 400H { nop }
+    ;rept 400H { nop }
     call _shell_allocate_struct
     call _shell_set_raw_mode
     xor eax, eax
@@ -110,7 +110,7 @@ _shell_process_command:
     mov edi, (_SHELL_BUFFER_INTERNAL + _shell_aggregate.command.buffer)
     call _shell_skip_whitespace
     jz _shell_process_command_validate
- irp _kind*, help,copyright,uid,uname,shutdown,reboot,hostname,fg,bg,resolution,clear,sigint,usertest,segvtest,kill
+ irp _kind*, help,copyright,uid,uname,shutdown,reboot,hostname,fg,bg,resolution,clear,sigint,usertest,segvtest,kill,sockpoc,sqrt,md5
  {
     mov eax, _shell_#_kind#.sizeof
     mov ebx, _#_kind#_payload
@@ -1054,6 +1054,10 @@ _shell_sigint string "sigint"
 _shell_usertest string "usertest"
 _shell_segvtest string "segvtest"
 
+_shell_sqrt string "sqrt"
+_shell_sockpoc string "sockpoc"
+_shell_md5 string "md"
+
 _shell_stopped_1 string "process stopped [PID "
 _shell_stopped_2 string "]"
 
@@ -1085,6 +1089,9 @@ _extract _clear
 _extract _sigint
 _extract _usertest
 _extract _segvtest
+_extract _sockpoc
+_extract _sqrt
+_extract _md5
 
 _shell.sizeof = ($ - $$)
 end virtual

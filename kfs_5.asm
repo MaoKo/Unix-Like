@@ -143,6 +143,122 @@ struct _mode_info_block _mode_attributes*, _wina_attributes*, _winb_attributes*,
     .reserved_3:        db 0BDH dup 0H
 ends
 
+_MP_FLOATING_POINTER_SIGNATURE = "_MP_"
+struct _mp_floating_pointer _signature*, _physical_address*, _length*, _spec_rev*,\
+        _checksum*, _mp_feature_1*, _mp_feature_2*
+    .signature:         dd (_signature)
+    .physical_address:  dd (_physical_address)
+    .length:            db (_length)
+    .spec_rev:          db (_spec_rev)
+    .checksum:          db (_checksum)
+    .mp_feature_1:      db (_mp_feature_1)
+    .mp_feature_2:      db (_mp_feature_2)
+    .mp_feature_3:      db 0H
+    .mp_feature_4:      db 0H
+    .mp_feature_5:      db 0H
+ends
+
+_mp_floating_pointer_base: dd (not 0H)
+
+struct _mp_configuration_table _signature*, _base_length*, _spec_rev*, _checksum*, _oem_id*,\
+        _product_id*, _oem_table*, _oem_length*, _entry_count*, _local_apic*, _extended_length*, _extended_checksum*
+    .signature:         dd (_signature)
+    .base_length:       dw (_base_length)
+    .spec_rev:          db (_spec_rev)
+    .checksum:          db (_checksum)
+    .oem_id:            dq (_oem_id)
+    .product_id:        dq ((_product_id) and 0FFFFFFFFFFFFFFFFH)
+                        dd ((_product_id) shr 040H)
+    .oem_table:         dd (_oem_table)
+    .oem_length:        dw (_oem_length)
+    .entry_count:       dw (_entry_count)
+    .local_apic:        dd (_local_apic)
+    .extended_length:   dw (_extended_length)
+    .extended_checksum: db (_extended_checksum)
+    .reserved:          db 0H
+ends
+
+_PROCESSOR_ENTRY        = 0H
+_BUS_ENTRY              = 1H
+_IO_APIC_ENTRY          = 2H
+_IO_INTERRUPT_ENTRY     = 3H
+_LOCAL_INTERRUPT_ENTRY  = 4H
+
+_PROCESSOR_FLAGS_EN = (1H shl 0H)
+_PROCESSOR_FLAGS_BP = (1H shl 1H)
+struct _processor_entry _local_apic_id*, _local_apic_version*, _cpu_flags*, _cpu_signature*, _feature_flags*
+    .type:              db (_PROCESSOR_ENTRY)
+    .local_apic_id:     db (_local_apic_id)
+    .local_apic_version:db (_local_apic_version)
+    .cpu_flags:         db (_cpu_flags)
+    .cpu_signature:     dd (_cpu_signature)
+    .feature_flags:     dd (_feature_flags)
+    .reserved:          dq 0H
+ends
+
+struct _bus_entry _bus_id*, _bus_string*
+    .type:              db (_BUS_ENTRY)
+    .bus_id:            db (_bus_id)
+    .bus_string:        dd ((_bus_string) and 0FFFFFFFFH)
+                        dw ((_bus_string) shr 020H)
+ends
+
+_IO_APIC_FLAGS_EN = (1H shl 0H)
+struct _io_apic_entry _io_apic_id*, _io_apic_version*, _io_apic_flags*, _io_apic_address*
+    .type:              db (_IO_APIC_ENTRY)
+    .io_apic_id:        db (_io_apic_id)
+    .io_apic_version:   db (_io_apic_version)
+    .io_apic_flags:     db (_io_apic_flags)
+    .io_apic_address:   dd (_io_apic_address)
+ends
+
+_IO_INTERRUPT_FLAGS_PO = (1H shl 0H)
+_IO_INTERRUPT_FLAGS_EL = (1H shl 1H)
+struct _io_interrupt_entry _interrupt_type*, _io_interrupt_flags*, _source_bus_id*,\
+        _source_bus_irq*, _destination_io_apic_id*, _destination_io_apic_intin*
+    .type:                      db (_IO_INTERRUPT_ENTRY)
+    .interrupt_type:            db (_interrupt_type)
+    .io_interrupt_flags:        dw (_io_interrupt_flags)
+    .source_bus_id:             db (_source_bus_id)
+    .source_bus_irq:            db (_source_bus_irq)
+    .destination_io_apic_id:    db (_destination_io_apic_id)
+    .destination_io_apic_intin: db (_destination_io_apic_intin)
+ends
+
+_LOCAL_INTERRUPT_FLAGS_PO = (1H shl 0H)
+_LOCAL_INTERRUPT_FLAGS_EL = (1H shl 1H)
+struct _local_interrupt_entry _interrupt_type*, _io_interrupt_flags*, _source_bus_id*,\
+        _source_bus_irq*, _destination_local_apic_id*, _destination_local_apic_lintin*
+    .type:                          db (_LOCAL_INTERRUPT_ENTRY)
+    .interrupt_type:                db (_interrupt_type)
+    .local_interrupt_flags:         dw (_io_interrupt_flags)
+    .source_bus_id:                 db (_source_bus_id)
+    .source_bus_irq:                db (_source_bus_irq)
+    .destination_local_apic_id:     db (_destination_local_apic_id)
+    .destination_local_apic_lintin: db (_destination_local_apic_lintin)
+ends
+
+_RSDP_MAGIC = "RSD PTR "
+struct _rsdp_descriptor_1 _signature*, _checksum*, _oemid*, _revision*, _rsdt_address*
+    .signature:         dq (_signature)
+    .checksum:          db (_checksum)
+    .oemid:             dd ((_oemid) and 0FFFFFFFFH)
+                        dw ((_oemid) shr 020H) 
+    .revision:          db (_revision)
+    .rsdt_address:      dd (_rsdt_address)
+ends
+
+struct _rsdp_descriptor_2 _signature*, _checksum*, _oemid*, _revision*, _rsdt_address*,\
+        _length*, _xsdt_address*, _extended_checksum*
+    .first_part         _rsdp_descriptor_1 _signature, _checksum, _oemid, _revision, _rsdt_address
+    .length:            dd (_length)
+    .xsdt_address:      dq (_xsdt_address)
+    .extended_checksum: db (_extended_checksum)
+    .reserved:          db 3H dup 0H
+ends
+
+_rsdp_descriptor_base: dd (not 0H)
+
 page_table _default_directory_mapping
     PT_pe _default_table_mapping, (_PE_PRESENT or _PE_READ_WRITE)
     PT_pe _default_table_mapping, (_PE_PRESENT or _PE_READ_WRITE), (_KERNEL_VIRTUAL shr _PAGE_DIRECTORY_SHIFT)
@@ -193,7 +309,7 @@ rept 080H i:1H
 {
     page_table _pae_table_identity_#i, 1H
         repeat _PAE_TABLE_ENTRY_COUNT
-            PT_pe (((i - 1H) shl _PAE_PAGE_DIRECTORY_SHIFT) + ((% - 1H) shl _PAGE_TABLE_SHIFT)), _PE_USER or _PE_READ_WRITE or _PE_PRESENT
+            PT_pe (((i - 1H) shl _PAE_PAGE_DIRECTORY_SHIFT) + ((% - 1H) shl _PAGE_TABLE_SHIFT)), _PE_READ_WRITE or _PE_PRESENT
         end repeat
     end page_table
 }
@@ -282,8 +398,8 @@ _kernel_setup:
     mov esi, _default_directory_mapping
     mov cr3, esi
     mov esi, cr0
-    or esi, (_CR0_PG or _CR0_WP or _CR0_TS or _CR0_MP)
-    and esi, (not (_CR0_CD or _CR0_NW))
+    or esi, (_CR0_PG or _CR0_WP); or _CR0_NE or _CR0_MP)
+    and esi, (not (_CR0_CD or _CR0_NW or _CR0_AM or _CR0_TS or _CR0_EM))
     mov cr0, esi
     wbinvd
     mov edi, _kernel_setup_linear
@@ -303,10 +419,48 @@ _kernel_setup_linear:
     xor edx, edx
     mov edi, _BITMAP_SET
     call _bitmap_update
+_kernel_setup_find_mp_floating_pointer:
+    mov eax, _MP_FLOATING_POINTER_SIGNATURE
+    xor edi, edi
+_kernel_setup_find_mp_floating_pointer_loop:
+    scasd
+    jz _kernel_setup_save
+    add edi, (010H - 4H)
+    cmp edi, 0100000H
+    jae _kernel_setup_continue
+    jmp _kernel_setup_find_mp_floating_pointer_loop
+_kernel_setup_save:
+    lea edi, [edi-4H]
+    mov dword [_mp_floating_pointer_base], edi
+_kernel_setup_continue:
     mov esi, _singleton
     call _cpuid_detection
+    test byte [_singleton.apic], 1H
+    jz _kernel_setup_feature
+    mov ecx, _IA32_APIC_BASE
+    rdmsr
+    or eax, _APIC_BASE_EN
+    wrmsr
+_kernel_setup_feature:
     mov eax, cr4
-    or eax, (_CR4_PSE or _CR4_PGE)
+    or eax, (_CR4_PSE or _CR4_PGE or _CR4_PCE or _CR4_OSFXSR or _CR4_OSXMMEXCPT)
+    and eax, (not _CR4_TSD)
+    test byte [_singleton.xsave], 1H
+    jz _kernel_setup_security
+    or eax, _CR4_OSXSAVE
+    inc byte [_singleton.osxsave]
+_kernel_setup_security:
+  if (_UMIP_ALLOW)
+    test byte [_singleton.umip], 1H
+    jz $+5H
+    or eax, _CR4_UMIP
+  end if
+    test byte [_singleton.smap], 1H
+    jz $+5H
+    or eax, _CR4_SMAP
+    test byte [_singleton.smep], 1H
+    jz $+5H
+    or eax, _CR4_SMEP
     test byte [_singleton.pae], 1H
     jz $+5H
     or eax, _CR4_PAE

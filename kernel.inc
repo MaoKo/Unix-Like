@@ -43,6 +43,8 @@
 ; |                      |
 ; |                      |
 ; |----------------------|
+; |  APIC Registers Set  | Used by Legacy APIC, xAPIC (x2APIC use MSR)
+; |----------------------|
 ; |  VDSO Runnable Code  | Used by sigret syscall and sysenter
 ; ////////////////////////
 ; |   Video Framebuffer  | 16Mb to sastify all kind of resolution
@@ -116,6 +118,7 @@ irp _kind*, _TEMP_1,_TEMP_2
 _KERNEL_VIRTUAL_INDEX = (_KERNEL_VIRTUAL shr _PAGE_DIRECTORY_SHIFT)
 _KERNEL_VIRTUAL_COUNT = ((_TABLE_ENTRY_COUNT - _KERNEL_VIRTUAL_INDEX) - 1H)
 _PAGE_DIRECTORY_ITSELF = (_PAGE_DIRECTORY_LINEAR or (_PAGE_DIRECTORY_INDEX shl 2H))
+_APIC_REGISTERS_SET = (_USER_VDSO_VIRTUAL - _PAGE_FRAME_SIZE)
 _USER_VDSO_VIRTUAL = (_FRAME_BUFFER_START - (_PSE_PAGE_FRAME_SIZE shl 1H))
 _FRAME_BUFFER_START = (_SENSITIVE_TEMPORARY_START - (_REGEN_4MB_PAGE * _PSE_PAGE_FRAME_SIZE))
 _SENSITIVE_TEMPORARY_START = _TEMP_1_LINEAR_PTE
@@ -146,13 +149,14 @@ irp _kind*, TEMP_1,TEMP_2
         or (_PAE_#_kind#_INDEX shl _PAGE_TABLE_SHIFT))
     _PAE_#_kind#_LINEAR_ITSELF = (_PAE_KERNEL_PAGE_DIRECTORY + (_PAE_#_kind#_INDEX shl 3H))
 }
+_PAE_APIC_REGISTERS_SET = (_PAE_USER_VDSO_VIRTUAL - _PAGE_FRAME_SIZE)
 _PAE_USER_VDSO_VIRTUAL = (_PAE_FRAME_BUFFER_START - (_PAE_PSE_PAGE_FRAME_SIZE shl 1H))
 _PAE_FRAME_BUFFER_START = (_PAE_SENSITIVE_TEMPORARY_START - _PAE_PSE_PAGE_FRAME_SIZE - (_REGEN_4MB_PAGE * _PSE_PAGE_FRAME_SIZE)) ; need to align on _PSE_OFFSET_MASK
 _PAE_SENSITIVE_TEMPORARY_START = _PAE_TEMP_1_LINEAR_PTE
 _PAE_SENSITIVE_RECURSIVE_START = _PAE_PTE_RECURSIVE_BASE
 assert (_PAE_SENSITIVE_TEMPORARY_START < _PAE_SENSITIVE_RECURSIVE_START) 
 
-assert (_USER_VDSO_VIRTUAL = _PAE_USER_VDSO_VIRTUAL)
+assert ((_APIC_REGISTERS_SET = _PAE_APIC_REGISTERS_SET) & (_USER_VDSO_VIRTUAL = _PAE_USER_VDSO_VIRTUAL))
 
 define _TELETYPE_COUNT 8H
 _PAE_TELETYPE_START = 0H ; (_PAE_SENSITIVE_START - (_TELETYPE_COUNT shl ((bsf _PAE_TABLE_ENTRY_COUNT) + _PAGE_TABLE_SHIFT)))
@@ -262,8 +266,10 @@ struct _session_descriptor _sid*, _leader*, _grplist*, _teletype*, _attach*, _pr
     .list       _linked (_prev), (_next)
 ends
 
-struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*, _msr*, _apic*, _sep*, _mtrr*, _wc*, _fix*,\
-        _fpu*, _mmx*, _vme*, _de*, _smap*, _smep*, _sse*, _fxsr*
+struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*, _msr*, _xcr0*, _xsave*, _xsaves*,\
+        _osxsave*, _apic*, _x2apic*, _sep*, _mtrr*, _wc*, _fix*, _fpu*, _mmx*, _vme*, _de*, _smap*, _smep*, _avx*,\
+        _sse*, _sse2*, _sse3*, _ssse3*, _sse41*, _sse42*, _aes*, _pclmulqdq*, _fxsr*, _fsgsbase*,\
+        _rdseed*, _sha*, _umip*, _pcid*, _bmi1*, _bmi2*
     .pae:       db (_pae)
     .maxphyaddr:db (_maxphyaddr)
     .nx:        db (_nx)
@@ -273,7 +279,12 @@ struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*,
     .pat:       db (_pat)
     .popcnt:    db (_popcnt)
     .msr:       db (_msr)
+    .xcr0:      db (_xcr0)
+    .xsave:     db (_xsave)     ; user xsave
+    .xsaves:    db (_xsaves)    ; supervisor xsave
+    .osxsave:   db (_osxsave)
     .apic:      db (_apic)
+    .x2apic:    db (_x2apic)
     .sep:       db (_sep)
     .mtrr:      db (_mtrr)
     .wc:        db (_wc)
@@ -282,18 +293,37 @@ struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*,
     .mmx:       db (_mmx)
     .vme:       db (_vme)
     .de:        db (_de)
-    .smap:      db (_smap)
-    .smep:      db (_smep)
+    .avx:       db (_avx)
     .sse:       db (_sse)
+    .sse2:      db (_sse2)
+    .sse3:      db (_sse3)
+    .ssse3:     db (_ssse3)
+    .sse41:     db (_sse41)
+    .sse42:     db (_sse42)
+    .aes:       db (_aes)
+    .pclmulqdq: db (_pclmulqdq)
     .fxsr:      db (_fxsr)
+    .fsgsbase:  db (_fsgsbase)
+    .smep:      db (_smep)
+    .smap:      db (_smap)
+    .rdseed:    db (_rdseed)
+    .sha:       db (_sha)
+    .umip:      db (_umip)
+    .pcid:      db (_pcid)
+    .bmi1:      db (_bmi1)
+    .bmi2:      db (_bmi2)
 ends
 
-_singleton _cpuid 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
+_singleton _cpuid 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
+    0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
 
 _memory_size: dd 0H
-
 _kernel_mapping: dd 0H
 _kernel_vdso: dq 0H
+_local_apic_base: dd 0H
+_io_apic_base: dd 0H
+_io_apic_count: db 0H
+_processor_count: db 0H
 
 _page_descriptor_head: dd 0H
 
@@ -477,12 +507,24 @@ struct _signal_context _handler*, _sigframe*, _newfrm*, _assign*, _nested*
 ends
 assert (_signal_context.sizeof = 010H)
 
+struct _socket _filde*, _lock*, _bind*, _port*, _buffer*, _cursor*, _stand*, _prev*, _next*
+    .filde:     dd (_filde)
+    .lock:      db (_lock)
+    .bind:      db (_bind)
+    .port:      dw (_port)
+    .buffer:    dd (_buffer)
+    .cursor:    dd (_cursor)
+    .stand:     dd (_stand)
+    .list       _linked (_prev), (_next)
+ends
+
 enum SIGHUP:1H, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGIOT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1, SIGSEGV, SIGUSR2,\
     SIGPIPE, SIGALRM, SIGTERM, SIGSTKFLT, SIGCHLD, SIGCONT, SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU, _SIGNALS:&
 _PROCESS_SIGNALS_BITMAP = ((_SIGNALS + (_BITMAP_UNIT - 1H)) and (not (_BITMAP_UNIT - 1H)))
+_PORT_RANGE = (_PORT_AVAILABLE shr 3H)
 
 enum _PROCESS_RUN, _PROCESS_ZOMBIE, _PROCESS_SLEEP, _PROCESS_STOP, _PROCESS_DEAD
-struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _mnbrk*, _break*, _ustck*, _mapping*, _parent*, _childs*, _sesdesc*, _grpdesc*,\
+struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _tid*, _mnbrk*, _break*, _ustck*, _mapping*, _parent*, _childs*, _socket*, _sockno*, _sesdesc*, _grpdesc*,\
         _siblings_prev*, _siblings_next*, _pgroup_prev*, _pgroup_next*, _stackpf*, _pfcount*, _sigcnt*, _signst*, _sigstp*, _tty*, _waitable*, _jststp*, _jstcnt*,\
         _vm86*, _vmflgs*, _lwreal*, _hgreal*, _mapreal*, _lckreal*, _vif*, _vip*, _extcde*, _fground_prev*, _fground_next*, _priority*, _increment*, _channel*,\
         _kstack*, _vstack*, _pgstck*, _retframe*, _vmframe*, _context*, _list_prev*, _list_next*, _name*
@@ -491,12 +533,15 @@ struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _mnbrk*, _break*, _ustck*,
     .uid:       dd (_uid)
     .pgid:      dd (_pgid)
     .sid:       dd (_sid)
+    .tid:       dd (_tid)
     .mnbrk:     dd (_mnbrk) ; the minimum value of program break
     .break:     dd (_break) ; program break
     .ustck:     dd (_ustck) ; always decrement never increment
     .mapping:   dd (_mapping)
     .parent:    dd (_parent)
     .childs:    dd (_childs)
+    .socket:    dd (_socket)
+    .sockno:    dd (_sockno)
     .sesdesc:   dd (_sesdesc)
     .grpdesc:   dd (_grpdesc)
     .siblings   _linked _siblings_prev, _siblings_next
@@ -509,6 +554,7 @@ struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _mnbrk*, _break*, _ustck*,
     .sigcnt:    dd (_sigcnt) ; count of received signal even if it's blocked with sigmask
     .signst:    db (_signst) ; signal nested counter
     .sigstp:    db (_sigstp) ; signal that caused a stop
+    .ports      _bitmap _PORT_RANGE
     .waitable:  db (_waitable)
     .vm86:      db (_vm86)
     .vmflgs:    dd (_vmflgs)
@@ -537,6 +583,7 @@ struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _mnbrk*, _break*, _ustck*,
     ;.extwhy:    dd (0H)
 
     .dna:       db 0H
+    .restore:   dd 0H
 
     .extcde:    dd (_extcde)
 
@@ -566,6 +613,27 @@ _kernel_entry:
     mov al, _INTEL_RESERVED_INT
     call _8259_remap
     call _configure_8253
+    test byte [_singleton.xsave], 1H
+    jz _kernel_entry_xsave
+    test byte [_singleton.sse], 1H
+    jz _kernel_entry_xsave
+    test byte [_singleton.xsaves], 1H
+    jz _kernel_entry_rfbm
+    xor edx, edx
+    xor eax, eax
+    mov ecx, _IA32_XSS
+    wrmsr
+_kernel_entry_rfbm:
+    xor ecx, ecx
+    mov cl, _XCR0
+    xgetbv
+    or al, _XCR0_SSE
+    test byte [_singleton.avx], 1H
+    jz _kernel_entry_xcr0_write
+    or al, _XCR0_AVX
+_kernel_entry_xcr0_write:
+    xsetbv
+_kernel_entry_xsave:
     test byte [_singleton.pae], 1H
     jz _kernel_entry_efer
     test byte [_singleton.nx], 1H
@@ -587,6 +655,22 @@ _kernel_entry_efer:
     ltr ax
     jmp far _CODE_KERNEL:_kernel_entry_setup
 _kernel_entry_setup:
+    finit
+    test byte [_singleton.sse], 1H
+    jz _kernel_entry_default
+    ldmxcsr dword [_default_mxcsr]
+_kernel_entry_default:
+    mov edi, _fpu_init
+    fxsave [edi]
+
+    ;mov eax, cr4
+    ;or eax, _CR4_SMAP
+    ;mov cr4, eax
+    ;clac
+    ;mov al, byte [esp]
+    ;mov byte [esp], 0H
+    ;stac
+
     mov ax, _DATA_KERNEL
     mov ds, ax
     mov es, ax
@@ -599,7 +683,8 @@ _kernel_entry_setup:
     mov dr1, eax
     mov dr2, eax
     mov eax, (_DR7_GD or (_DEBUG_LEN_4B shl _DR7_LEN2) or (_DEBUG_RW_DATA_WRITE shl _DR7_RW2) or (_DEBUG_LEN_2B shl _DR7_LEN1) or\
-        (_DEBUG_RW_DATA_WRITE shl _DR7_RW1) or (_DEBUG_LEN_1B shl _DR7_LEN0) or (_DEBUG_RW_DATA_WRITE shl _DR7_RW0) or _DR7_GE or _DR7_G2 or _DR7_G1 or _DR7_G0) 
+        (_DEBUG_RW_DATA_WRITE shl _DR7_RW1) or (_DEBUG_LEN_1B shl _DR7_LEN0) or (_DEBUG_RW_DATA_WRITE shl _DR7_RW0) or\
+        _DR7_GE or _DR7_G2 or _DR7_G1 or _DR7_G0) 
     ;mov dr7, eax
 
     mov eax, _frame
@@ -626,9 +711,104 @@ _kernel_entry_setup:
 
     call _teletype_initialize
     jc _panic
+    call _refresh_apic_registers_set
+    jc _panic
+    or dword [_APIC_REGISTERS_SET+_SPURIOUS_INTERRUPT_VECTOR_REGISTER], _SPURIOUS_APIC_ENABLE
     call _create_vdso
     jc _panic
     
+    mov ebx, dword [_mp_floating_pointer_base]
+    test ebx, ebx
+    js _kernel_entry_uniprocessor
+    mov ebx, dword [ebx+_mp_floating_pointer.physical_address]
+    mov ecx, dword [ebx+_mp_configuration_table.entry_count]
+    jecxz _kernel_entry_uniprocessor
+    add ebx, _mp_configuration_table.sizeof
+    xor eax, eax
+_kernel_entry_iterate:
+    mov dl, byte [ebx]
+    cmp dl, _PROCESSOR_ENTRY
+    mov al, _processor_entry.sizeof
+    jz _kernel_entry_processor
+    cmp dl, _BUS_ENTRY
+    mov al, _bus_entry.sizeof
+  assert ((_bus_entry.sizeof = _io_apic_entry.sizeof) & (_io_apic_entry.sizeof = _io_interrupt_entry.sizeof) &\
+        (_io_interrupt_entry.sizeof = _local_interrupt_entry.sizeof))
+    jz _kernel_entry_bus
+    cmp dl, _IO_APIC_ENTRY
+    jz _kernel_entry_io_apic
+    cmp dl, _IO_INTERRUPT_ENTRY
+    jz _kernel_entry_io_interrupt
+    cmp dl, _LOCAL_INTERRUPT_ENTRY
+    jz _kernel_entry_local_interrupt
+    jmp _panic
+_kernel_entry_processor:
+    inc byte [_processor_count]
+    jmp _kernel_entry_update
+_kernel_entry_io_apic:
+    inc byte [_io_apic_count]
+    mov edx, dword [ebx+_io_apic_entry.io_apic_address]
+    mov dword [_io_apic_base], edx
+_kernel_entry_bus:
+_kernel_entry_io_interrupt:
+_kernel_entry_local_interrupt:
+_kernel_entry_update:
+    add ebx, eax
+    loop _kernel_entry_iterate
+_kernel_entry_uniprocessor:
+
+_abc:
+    pushd _SP_FP_NEGATIVE_SNAN
+    fld dword [esp]
+
+    pushw 0H
+    fldcw word [esp]
+    fldz
+    fld1
+    fdiv st0, st1
+    xor al, al
+    wait
+    out 0F0H, al
+    nop
+    sti
+    nop
+    nop
+    
+    mov word [0DEADH], 0FEEBH
+    mov al, (_CMOS_ENABLE_NMI or _RESET_CODE_BYTE)
+    out _CMOS_SELECT, al
+    mov al, _BIOS_JUMP_EOI
+    out _CMOS_PORT, al
+    mov dword [_WARN_RESET_VECTOR], 0DEADH
+    call _reboot_system
+    jmp $
+
+    mov eax, _next
+    mov word [_interrupt_stub_49], 0E0FFH
+    mov edx, dword [_APIC_REGISTERS_SET+_LOCAL_APIC_ID_REGISTER]
+    shl edx, (_ICR_XAPIC_DESTINATION_SHIFT - 020H)
+    mov dword [_APIC_REGISTERS_SET+_INTERRUPT_COMMAND_REGISTER_HIGH], edx
+    mov dword [_APIC_REGISTERS_SET+_INTERRUPT_COMMAND_REGISTER_LOW], (_LVT_LINT_DELIVERY_INIT)
+    sti
+    jmp $
+
+_next:
+    mov eax, dword [_APIC_REGISTERS_SET+_INTERRUPT_COMMAND_REGISTER_LOW]
+
+    ;mov dword [_APIC_REGISTERS_SET+_LVT_LINT0], (_LVT_LINT_LEVEL_SENSITIVE or 031H)
+
+    mov dword [_APIC_REGISTERS_SET+_TASK_PRIORITY_REGISTER], (2H shl 4H)
+    mov dword [_APIC_REGISTERS_SET+_LVT_TIMER], 031H
+    mov dword [_APIC_REGISTERS_SET+_TIMER_DIVIDE_CONFIG_REGISTER], _LVT_TIMER_DIVIDE_2
+    mov dword [_APIC_REGISTERS_SET+_TIMER_INITIAL_COUNT_REGISTER], 100H
+    ;sti
+    mov eax, dword [_APIC_REGISTERS_SET+_LVT_TIMER]
+_loop:
+    mov eax, dword [_APIC_REGISTERS_SET+_TIMER_CURRENT_COUNT_REGISTER]
+    ;test eax, eax
+    ;jz _j
+    jmp _loop
+
     test byte [_singleton.sep], 1H
     jz _kernel_entry_sysenter
     xor edx, edx
@@ -691,10 +871,32 @@ _kernel_entry_next:
 _cpuid_detection:
  ; in: esi - cpuid state object
  ; preserves: ebx, ecx, edx, esi, edi, ebp
-    push ebx ecx edx
+ ; note: try to execute cpuid as much as possible. It's a serialization instruction (out-of-order are disable)
+    push ebx ecx edx edi ebp
+    mov byte [esi+_cpuid.maxphyaddr], (not 0H)
+    pushfd
+    or dword [esp], _EFLAGS_CPUID
+    popfd
+    pushfd
+    pop eax
+    test eax, _EFLAGS_CPUID
+    jz _cpuid_detection_exit
+    xor ecx, ecx
+    mov cl, _cpuid.sizeof
+    call _clear_string
     xor eax, eax
-    inc al
-    cpuid ; try to execute cpuid as much as possible. It's a serialization instruction (out-of-order are disable)
+    cpuid
+    mov edi, eax
+    mov eax, (1H shl 01FH)
+    cpuid
+    mov ebp, eax
+    xor eax, eax
+    mov al, _CPUID_LEAF_PROCESSOR_INFO
+  assert ((_CPUID_LEAF_PROCESSOR_INFO < _CPUID_LEAF_EXTEND_FEATURE) &\
+        (_CPUID_LEAF_EXTEND_FEATURE < _CPUID_LEAF_EXTEND_STATE))
+    cmp eax, edi
+    ja _cpuid_detection_extended
+    cpuid
     test edx, _CPUID_EDX_FPU
     jz $+5H
     inc byte [esi+_cpuid.fpu]
@@ -734,18 +936,99 @@ _cpuid_detection:
     test edx, _CPUID_EDX_SSE
     jz $+5H
     inc byte [esi+_cpuid.sse]
+    test edx, _CPUID_EDX_SSE2
+    jz $+5H
+    inc byte [esi+_cpuid.sse2]
+    test ecx, _CPUID_ECX_SSE3
+    jz $+5H
+    inc byte [esi+_cpuid.sse3]
+    test ecx, _CPUID_ECX_PCLMULQDQ
+    jz $+5H
+    inc byte [esi+_cpuid.pclmulqdq]
+    test ecx, _CPUID_ECX_SSSE3
+    jz $+5H
+    inc byte [esi+_cpuid.ssse3]
+    test ecx, _CPUID_ECX_PCID
+    jz $+5H
+    inc byte [esi+_cpuid.pcid]
+    test ecx, _CPUID_ECX_SSE41
+    jz $+5H
+    inc byte [esi+_cpuid.sse41]
+    test ecx, _CPUID_ECX_SSE42
+    jz $+5H
+    inc byte [esi+_cpuid.sse42]
+    test ecx, _CPUID_ECX_X2APIC
+    jz $+5H
+    inc byte [esi+_cpuid.x2apic]
     test ecx, _CPUID_ECX_POPCNT
     jz $+5H
     inc byte [esi+_cpuid.popcnt]
-    mov eax, 080000001H
+    test ecx, _CPUID_ECX_AES
+    jz $+5H
+    inc byte [esi+_cpuid.aes]
+    test ecx, _CPUID_ECX_XSAVE
+    jz $+5H
+    inc byte [esi+_cpuid.xsave]
+    test ecx, _CPUID_ECX_AVX
+    jz $+5H
+    inc byte [esi+_cpuid.avx]
+    xor eax, eax
+    mov al, _CPUID_LEAF_EXTEND_FEATURE
+    cmp eax, edi
+    ja _cpuid_detection_extended
+    xor ecx, ecx
+    mov cl, _CPUID_SUBLEAF_EXTEND_FEATURE
+    cpuid
+    test ebx, _CPUID_EBX_FSGSBASE
+    jz $+5H
+    inc byte [esi+_cpuid.fsgsbase]
+    test ebx, _CPUID_EBX_BMI1
+    jz $+5H
+    inc byte [esi+_cpuid.bmi1]
+    test ebx, _CPUID_EBX_SMEP
+    jz $+5H
+    inc byte [esi+_cpuid.smep]
+    test ebx, _CPUID_EBX_BMI2
+    jz $+5H
+    inc byte [esi+_cpuid.bmi2]
+    test ebx, _CPUID_EBX_RDSEED
+    jz $+5H
+    inc byte [esi+_cpuid.rdseed]
+    test ebx, _CPUID_EBX_SMAP
+    jz $+5H
+    inc byte [esi+_cpuid.smap]
+    test ebx, _CPUID_EBX_SHA
+    jz $+5H
+    inc byte [esi+_cpuid.sha]
+    test ecx, _CPUID_ECX_UMIP
+    jz $+5H
+    inc byte [esi+_cpuid.umip]
+    xor eax, eax
+    mov al, _CPUID_LEAF_EXTEND_STATE
+    cmp eax, edi
+    ja _cpuid_detection_extended
+    xor ecx, ecx
+    mov cl, _CPUID_SUBLEAF_EXTEND_STATE
+    cpuid
+    test eax, _CPUID_EAX_XSAVES
+    jz $+5H
+    inc byte [esi+_cpuid.xsaves]
+_cpuid_detection_extended:
+    mov eax, _CPUID_LEAF_EXTEND_INFO
+  assert (_CPUID_LEAF_EXTEND_INFO < _CPUID_LEAF_VIRTPHYSIZE)
+    cmp eax, ebp
+    ja _cpuid_detection_exit
     cpuid
     test edx, _CPUID_EDX_NX
     jz $+5H
     inc byte [esi+_cpuid.nx]
-    mov eax, 080000008H
+    mov eax, _CPUID_LEAF_VIRTPHYSIZE
+    cmp eax, ebp
+    ja _cpuid_detection_exit
     cpuid
     mov byte [esi+_cpuid.maxphyaddr], al
-    pop edx ecx ebx
+_cpuid_detection_exit:
+    pop ebp edi edx ecx ebx
     ret
 
 enum _SENSITIVE_TEMPORARY, _SENSITIVE_RECURSIVE
@@ -798,7 +1081,7 @@ _ensure_flags_exclusive:
 _ensure_flags_exclusive_exit:
     ret
 
-_ITERATE_REMAIN = (_PUSHA_ALL + (8H shl 2H))
+_ITERATE_REMAIN = (_PUSHA_TOTAL + (8H shl 2H))
 enum & _ITERATE_PDPTE, _ITERATE_PDE, _ITERATE_PTE, _ITERATE_REVERSE_COUNTER, _ITERATE_CARRY_ERROR
 _iterate_range_linear:
  ; in:
@@ -1763,6 +2046,7 @@ _user_vdso              _allocation_functors _allocate_user_vdso, _allocate_user
 _kernel_rw_page         _allocation_functors _allocate_kernel_rw_page, _allocate_kernel_pde, _allocate_kernel_pdpte
 _kernel_big_rw_page     _allocation_functors 0H, _allocate_kernel_big_rw_page, _allocate_kernel_pdpte
 _kernel_framebuffer     _allocation_functors 0H, _allocate_kernel_framebuffer, _allocate_kernel_pdpte
+_kernel_apic_base       _allocation_functors _allocate_kernel_apic_base, _allocate_kernel_pde, _allocate_kernel_pdpte
 
 _allocate_pdbr:
     mov eax, _PAGE_PDBR
@@ -1842,6 +2126,15 @@ _allocate_kernel_framebuffer_attribute:
     or eax, (_PE_IS_PDE or _PDE_SIZE or _PE_READ_WRITE or _PE_PRESENT)
     xor edx, edx
 _allocate_kernel_framebuffer_exit:
+    ret
+
+_allocate_kernel_apic_base:
+    mov eax, dword [_local_apic_base]
+    or al, (_PE_READ_WRITE or _PE_PRESENT)
+    xor edx, edx
+    test byte [_singleton.pat], 1H
+    jz $+5H
+    or eax, _MEMORY_UC
     ret
 
 irp _kind*, _allocate,_deallocate
@@ -2188,6 +2481,7 @@ _clear_pages:
  ; in: ecx - count of page to clear
     shl ecx, _PAGE_TABLE_SHIFT
 _clear_string:
+ ; out: eax = 0H
     xor eax, eax
 _store_string:
  ; out: cf - always clear
@@ -2226,6 +2520,26 @@ _copy_string_perform:
     rep movsb
 _copy_string_exit:
     cld
+    ret
+
+irp _kind*, _clear,_store,_copy
+{
+    _kind#_string_user:
+    call _disable_smap
+    call _kind#_string
+    jmp _enable_smap
+}
+
+_disable_smap:
+    test byte [_singleton.smap], 1H
+    jz $+5H
+    stac
+    ret
+
+_enable_smap:
+    test byte [_singleton.smap], 1H
+    jz $+5H
+    clac
     ret
 
 rept 2H i:1H
@@ -3086,6 +3400,43 @@ _next_power_two:
 _next_power_two_exit:
     ret
 
+_refresh_apic_registers_set:
+ ; out: cf - set if refresh not worth (x2APIC enable, APIC disable or not present)
+    xor eax, eax
+    lea ecx, [eax+1H]
+    mov al, _DEALLOCATION_VIRTUAL
+    mov ebx, _APIC_REGISTERS_SET
+    call _unmap_virtual_address
+    jc _refresh_apic_registers_set_exit+1H
+    test byte [_singleton.apic], 1H
+    jz _refresh_apic_registers_set_exit
+    xor ecx, ecx
+    mov cl, _IA32_APIC_BASE
+    rdmsr
+    test eax, _APIC_BASE_EN
+    jz _refresh_apic_registers_set_exit
+    test eax, _APIC_BASE_EXTD
+    jnz _refresh_apic_registers_set_exit
+    and eax, (not _PAGE_OFFSET_MASK)
+    mov dword [_local_apic_base], eax
+    mov ebx, _frame
+    xchg eax, ebx
+    call _convert_linear_bitmap
+    mov edi, _BITMAP_SET
+    call _bitmap_inverse
+    jc _refresh_apic_registers_set_exit+1H
+    xor eax, eax
+    mov al, (_ALLOCATION_VIRTUAL or _ALLOCATION_HINT)
+    mov ebx, _APIC_REGISTERS_SET
+    xor ecx, ecx
+    inc cl
+    mov edx, _kernel_apic_base
+    call _map_virtual_address
+    jmp _refresh_apic_registers_set_exit+1H
+_refresh_apic_registers_set_exit:
+    stc
+    ret
+
 _create_vdso:
  ; out: cf - set on error
  ; preserves: ebp
@@ -3093,7 +3444,8 @@ _create_vdso:
     lea ecx, [eax+1H]
     test byte [_singleton.pae], 1H
     jz _create_vdso_allocate
-    shl cl, 1H
+    ;shl cl, 1H
+    inc cl
 _create_vdso_allocate:
     mov al, (_ALLOCATION_VIRTUAL or _ALLOCATION_PSE or _ALLOCATION_HINT)
     mov ebx, _USER_VDSO_VIRTUAL
@@ -3150,6 +3502,7 @@ _page_descriptor_cache  _cache _page_descriptor.powertwo, 0H, 0H, 0H, 0H, 0H, 0H
 _process_cache          _cache _process.powertwo, 0H, 0H, 0H, 0H, 0H, 0H, 0H, "PROCESS"
 _process_group_cache    _cache _process_group_descriptor.powertwo, 0H, 0H, 0H, 0H, 0H, 0H, 0H, "PGROUP"
 _session_cache          _cache _session_descriptor.powertwo, 0H, 0H, 0H, 0H, 0H, 0H, 0H, "SESSION"
+_socket_cache           _cache _socket.powertwo, 0H, 0H, 0H, 0H, 0H, 0H, 0H, "SOCKET"
 
 _frame_cache            _cache _x86_register.powertwo, 0H, _construct_frame, 0H, 0H, 0H, 0H, 0H, "FRAME"
 
@@ -3608,7 +3961,7 @@ _remove_list_entry_exit:
     ret
 
 _FIND_LIST_REMAINS = (5H shl 2H)
-_FIND_LIST_REMAINS_SAVE_ALL = (_FIND_LIST_REMAINS + _PUSHA_ALL)
+_FIND_LIST_REMAINS_SAVE_ALL = (_FIND_LIST_REMAINS + _PUSHA_TOTAL)
 enum _LIST_FORWARD, _LIST_BACKWARD, _LIST_SAVE_ALL
 _LIST_SAVE_ALL_MASK = 100B
 _find_list:
@@ -3628,6 +3981,7 @@ _find_list:
     mov ecx, edi
     test eax, eax
     jz _find_list_carry
+;_def: XXX
     mov edi, dword [eax]
     test edi, edi
     jz _find_list_carry
@@ -3723,7 +4077,7 @@ _vfree:
     jc _vfree_exit
     call _deallocate_from_cache
 _vfree_exit:
-    pop esi edi
+    pop edi esi
     ret
 
 _ksize:
@@ -3996,16 +4350,21 @@ _create_process:
     mov edi, ebx
     mov ecx, _process.sizeof
     call _clear_string
- irp _kind*, sigmask,pending
+    mov dword [esi+_process.socket], eax
+    mov byte [esi+_process.dna], al
+ irp _kind*, sigmask,pending,ports
  {
-    lea eax, [esi+_process.#_kind#.table]
-    lea ebx, [eax-_BITMAP_UNIT]
-    mov dword [esi+_process.#_kind#.next], eax
-    mov dword [esi+_process.#_kind#.last], ebx
     lea eax, [esi+_process.#_kind]
-    mov ecx, _PROCESS_SIGNALS_BITMAP
-    mov edi, _BITMAP_EXPAND_ZERO
-    call _bitmap_resize
+    xor ebx, ebx
+  if ((_kind) eq ports)
+    mov ecx, _PORT_RANGE
+    mov bl, _BITMAP_EXPAND_ONE
+  else
+    xor ecx, ecx
+    mov bl, _BITMAP_EXPAND_ZERO
+    mov cl, _PROCESS_SIGNALS_BITMAP
+  end if
+    call _bitmap_init
  }
     mov dword [esi+_process.uid], _ROOT_UID
     mov dword [esi+_process.stackpf], _PROCESS_STACKPF
@@ -4015,6 +4374,7 @@ _create_process:
     mov dword [esi+_process.pid], eax
     mov dword [esi+_process.sid], eax
     mov dword [esi+_process.pgid], eax
+    mov dword [esi+_process.tid], eax
     mov ebx, esi
     mov ecx, _process.pgroup
     call _doubly_linked
@@ -4073,8 +4433,13 @@ _switch_process:
     push esi ebp
     push _switch_process_end
     mov esi, dword [_current]
+    cmp byte [esi+_process.dna], 0H
+    jz _switch_process_stack
+    mov eax, dword [esi+_process.restore]
+    fxsave [eax]
+_switch_process_stack:
     mov eax, dword [edi+_process.kstack]
-    mov dword [_tss.esp0], eax
+    mov dword [_tss.esp0], eax ; change entry for syscall
     xor eax, eax
     test byte [edi+_process.vm86], 1H
     jz _switch_process_save
@@ -4097,6 +4462,36 @@ _cr0_set_ts:
     or al, _CR0_TS
     mov cr0, eax
     call _pdpt_read_write_current
+    ret
+
+_save_floating_unit:
+ ; in: eax - memory area to save information (x87 legacy FPU, SSE, AVX)
+ ; out: cf - set if memory bad aligned
+ ; preserves: ebx, ecx, esi, edi, ebp
+    test byte [_singleton.sse], 1H
+    jz _save_floating_unit_legacy
+    test byte [_singleton.xsave], 1H
+    jz _save_floating_unit_fxsave
+    test byte [_singleton.avx], 1H
+    jz _save_floating_unit_fxsave
+    test eax, (040H - 1H)
+    jnz _save_floating_unit_exit
+    mov dword [_save_floating_unit_xsave], eax
+    mov eax, (_XCR0_x87 or _XCR0_SSE or _XCR0_AVX)
+    xor edx, edx
+    xsave [0H]
+  label _save_floating_unit_xsave dword at ($ - 4H)
+    jmp _save_floating_unit_exit+1H
+_save_floating_unit_fxsave:
+    test eax, (010H - 1H)
+    jnz _save_floating_unit_exit
+    fxsave [eax]
+    jmp _save_floating_unit_exit+1H
+_save_floating_unit_legacy:
+    fnstenv [eax]
+    jmp _save_floating_unit_exit+1H
+_save_floating_unit_exit:
+    stc
     ret
 
 _page_present:
@@ -4427,10 +4822,12 @@ _itoa_hexadecimal_store:
 
 include "errno.inc"
 
-enum _SYSCALL_EXIT, _SYSCALL_FORK, _SYSCALL_READ, _SYSCALL_WRITE, _SYSCALL_WAITPID, _SYSCALL_WAIT, _SYSCALL_EXEC, _SYSCALL_GUID, _SYSCALL_SUID,\
-    _SYSCALL_BRK, _SYSCALL_AMAP, _SYSCALL_UMAP, _SYSCALL_MPROT, _SYSCALL_GPID, _SYSCALL_GPPID, _SYSCALL_UNAME, _SYSCALL_IOCTL,\
-    _SYSCALL_SIGNAL, _SYSCALL_SIGRET, _SYSCALL_SIGMASK, _SYSCALL_KILL, _SYSCALL_RENICE, _SYSCALL_REBOOT, _SYSCALL_DAEMON, _SYSCALL_GPGID,\
-    _SYSCALL_SPGID, _SYSCALL_GPGRP, _SYSCALL_SPGRP, _SYSCALL_GSID, _SYSCALL_SSID, _SYSCALL_ARGCPY, _SYSCALL_MACCESS, _SYSCALL_TEST
+enum    _SYSCALL_EXIT, _SYSCALL_FORK, _SYSCALL_READ, _SYSCALL_WRITE, _SYSCALL_WAITPID, _SYSCALL_WAIT, _SYSCALL_EXEC, _SYSCALL_GUID, _SYSCALL_SUID,\
+        _SYSCALL_BRK, _SYSCALL_AMAP, _SYSCALL_UMAP, _SYSCALL_MPROT, _SYSCALL_GPID, _SYSCALL_GPPID, _SYSCALL_GTID, _SYSCALL_UNAME, _SYSCALL_IOCTL,\
+        _SYSCALL_SIGNAL, _SYSCALL_SIGRET, _SYSCALL_SIGMASK, _SYSCALL_KILL, _SYSCALL_RENICE, _SYSCALL_REBOOT, _SYSCALL_DAEMON, _SYSCALL_GPGID,\
+        _SYSCALL_SPGID, _SYSCALL_GPGRP, _SYSCALL_SPGRP, _SYSCALL_GSID, _SYSCALL_SSID, _SYSCALL_ARGCPY, _SYSCALL_MACCESS, _SYSCALL_OPEN,\
+        _SYSCALL_BIND, _SYSCALL_UNBIND, _SYSCALL_LISTEN, _SYSCALL_ALIVE, _SYSCALL_SEND, _SYSCALL_RECEIVE, _SYSCALL_FSHSCK,\
+        _SYSCALL_CLOSE, _SYSCALL_CLSALL, _SYSCALL_MD5, _SYSCALL_SHA1, _SYSCALL_AESENC_ECB, _SYSCALL_TEST
 
 _syscall_dispatcher:
  ; in:
@@ -4465,6 +4862,7 @@ _syscall_dispatcher_table:
     dd _syscall_mprot
     dd _syscall_gpid
     dd _syscall_gppid
+    dd _syscall_gtid
     dd _syscall_uname
     dd _syscall_ioctl
     dd _syscall_signal
@@ -4482,7 +4880,21 @@ _syscall_dispatcher_table:
     dd _syscall_ssid
     dd _syscall_argcpy
     dd _syscall_maccess
+    dd _syscall_open
+    dd _syscall_bind
+    dd _syscall_unbind
+    dd _syscall_listen
+    dd _syscall_alive
+    dd _syscall_send
+    dd _syscall_receive
+    dd _syscall_fshsck
+    dd _syscall_close
+    dd _syscall_clsall
+    dd _syscall_md5
+    dd _syscall_sha1
 
+    dd _syscall_aesenc_ecb
+    ;dd _syscall_aesdec
     dd _syscall_test
 _syscall_dispatcher_table_end:
 
@@ -4493,8 +4905,8 @@ struct _winsize _ws_row*, _ws_col*, _ws_xpixel*, _ws_ypixel*
     .ws_ypixel: dw (_ws_ypixel)
 ends
 
-enum TCGETS, TCSETS, TCSETSF, TIOCGWINSZ, TIOCSWINSZ, FIONREAD, TIOCINQ:&, TCFLSH, TIOCSTI, TIOCSCTTY, TIOCNOTTY,\
-    TIOCGPGRP, TIOCSPGRP, TIOCGSID, TIOCGTTYID, TIOCGWTTYID, _IOCTL:&
+enum    TCGETS, TCSETS, TCSETSF, TIOCGWINSZ, TIOCSWINSZ, FIONREAD, TIOCINQ:&, TCFLSH, TIOCSTI, TIOCSCTTY, TIOCNOTTY,\
+        TIOCGPGRP, TIOCSPGRP, TIOCGSID, TIOCGTTYID, TIOCGWTTYID, _IOCTL:&
 _syscall_ioctl:
  ; in:
  ;  ebx - tty number
@@ -4845,7 +5257,7 @@ _teletype_controlling_attach:
 _teletype_controlling_exit:
     ret
 
-_kernel_version string "achiu-au OS V3"
+_kernel_version string "achiu-au OS V5"
 _UNAME_SIZE = 010H
 _syscall_uname:
  ; in: ebx - userpace buffer (minmax _UNAME_SIZE)
@@ -4903,11 +5315,15 @@ _syscall_reboot:
     jnz _syscall_reboot_exit
     cmp ecx, _REBOOT_MAGIC2
     jnz _syscall_reboot_exit
+    mov ebx, _reboot_system
     cmp edx, _REBOOT_CMD_RESTART
-    jz _reboot_system
-_syscall_reboot_halt:
+    jz _syscall_reboot_jump
+    mov ebx, _power_off
     cmp edx, _REBOOT_CMD_HALT
-    jz _power_off
+    jnz _syscall_reboot_exit
+_syscall_reboot_jump:
+    wbinvd
+    jmp ebx
 _syscall_reboot_exit:
     ret
 
@@ -5563,6 +5979,1037 @@ _process_foreground_group_search:
     cmp ebp, ebx
     jmp _convert_zero_carry
 
+_syscall_open:
+ ; out: eax - socket filde
+    mov esi, dword [_current]
+    cmp dword [esi+_process.sockno], 07FFFFFFFH
+    mov eax, (-ERANGE)
+    jz _syscall_open_exit
+    xor eax, eax
+    mov al, _ALLOCATION_VIRTUAL
+    mov edi, _socket_cache
+    call _allocate_from_cache
+    mov eax, (-ENOMEM)
+    jc _syscall_open_exit
+    xor eax, eax
+    mov byte [ebx+_socket.lock], al
+    mov byte [ebx+_socket.bind], al
+    mov word [ebx+_socket.port], ax
+    mov edi, dword [esi+_process.sockno]
+    mov dword [ebx+_socket.filde], edi
+    mov ecx, _socket.list
+    call _doubly_linked
+    push ebx
+    lea edx, [esi+_process.socket]    
+    call _assign_list_esp
+    inc dword [esi+_process.sockno]
+    mov eax, edi
+_syscall_open_exit:
+    ret
+
+_convert_port_bitmap:
+ ; in:
+ ;  eax - bitmap object pointer
+ ;  ecx - port number
+ ; out: cf - carry set if data erroneous
+    call _sanitize_port_number
+    jc _convert_port_bitmap_exit
+    mov edx, ecx
+    and edx, 01FH
+    mov ebx, ecx
+    shr ebx, 3H
+    and ebx, (not 011B)
+    lea ebx, [eax+_bitmap.table+ebx]
+_convert_port_bitmap_exit:
+    ret
+
+_sanitize_port_number:
+ ; in: ecx - port number
+ ; out: cf - set if port number is invalid
+    cmp ecx, _PORT_AVAILABLE
+    cmc
+    ret
+
+_syscall_bind:
+ ; in:
+ ;  ebx - socket number
+ ;  ecx - port number
+    mov esi, ecx
+    mov ebp, dword [_current]
+    mov eax, ebx
+    mov ebx, ebp
+    xor edx, edx
+    mov dl, _SOCKET_FILDE
+    call _process_find_socket
+    mov eax, (-EFAULT)
+    jc _syscall_bind_exit
+    cmp byte [ebx+_socket.bind], 0H
+    mov eax, (-EBUSY)
+    jnz _syscall_bind_exit
+    lea eax, [ebp+_process.ports]
+    mov ebp, ebx
+    mov ecx, esi
+    call _convert_port_bitmap
+    jnc _syscall_bind_switch
+    mov eax, (-EINVAL)
+    jmp _syscall_bind_exit
+_syscall_bind_switch:
+    xor ecx, ecx
+    inc cl
+    mov edi, _BITMAP_SET
+    call _bitmap_inverse
+    mov eax, (-EBUSY)
+    jc _syscall_bind_exit
+    mov byte [ebp+_socket.bind], (not 0H)
+    mov word [ebp+_socket.port], si
+    xor eax, eax
+_syscall_bind_exit:
+    ret
+
+_syscall_listen:
+ ; in: ebx - socket port number
+    mov eax, ebx
+    mov esi, dword [_current]
+    mov ebx, esi
+    xor edx, edx
+    mov dl, _SOCKET_PORT
+    call _process_find_socket
+    mov eax, (-EEXIST)
+    jc _syscall_listen_exit
+    cmp byte [ebx+_socket.lock], 0H
+    jnz _syscall_listen_exit-2H
+    mov eax, ebx
+    mov ebx, esi
+    call _sleep_channel
+    xor eax, eax
+_syscall_listen_exit:
+    ret
+
+enum _SOCKET_FILDE, _SOCKET_PORT
+_process_find_socket:
+ ; in:
+ ;  eax - socket number or port number (assume port number is valid)
+ ;  ebx - target process
+ ;  edx - search kind
+ ; out:
+ ;  ebx - socket structure pointer
+ ;   cf - set if no socket has been found 
+ ; preserves: esi, edi, ebp
+    cmp edx, (_SOCKET_PORT + 1H)
+    cmc
+    jc _process_find_socket_exit
+    push esi ebp
+    mov ebp, eax
+    mov eax, dword [ebx+_process.socket]
+    mov ecx, _socket.list
+    mov esi, dword [_process_find_socket_table+edx*4H]
+    xor edx, edx
+    mov dl, _LIST_FORWARD
+    call _find_list
+    pop ebp esi
+_process_find_socket_exit:
+    ret
+_process_find_socket_table:
+    dd _process_find_socket_filde
+    dd _process_find_socket_port
+_process_find_socket_filde:
+    cmp dword [ebx+_socket.filde], ebp
+    jmp _convert_zero_carry
+_process_find_socket_port:
+    cmp byte [ebx+_socket.bind], 0H
+    jz _invert_zero_carry
+    cmp word [ebx+_socket.port], bp
+    jmp _convert_zero_carry
+
+_syscall_alive:
+ ; in:
+ ;  ebx - target process pid
+ ;  ecx - socket port number
+ ; out: cf - set when not alive
+    mov esi, ecx
+    call _sanitize_port_number
+    mov eax, (-EINVAL)
+    jc _syscall_alive_exit
+    mov eax, ebx
+    xor edx, edx
+    mov dl, _SEARCH_ALIVE_SYSTEM
+    call _search_pid
+    mov eax, (-EEXIST)
+    jc _syscall_send_finish
+    mov eax, esi
+    xor edx, edx
+    mov dl, _SOCKET_PORT
+    call _process_find_socket
+    mov eax, (-ENOENT)
+    jc _syscall_send_finish
+    xor eax, eax
+_syscall_alive_exit:
+    ret
+
+_syscall_send:
+ ; in:
+ ;  ebx - target process pid
+ ;  ecx - socket port number
+ ;  edx - userspace buffer
+ ;  esi - userspace buffer size
+ ; out: eax - written data count
+    push esi
+    call _syscall_gpid
+    cmp eax, ebx
+    mov eax, (-EINVAL)
+    jz _syscall_send_finish
+    call _sanitize_port_number
+    jc _syscall_send_finish
+    xchg esi, ecx
+    jecxz _syscall_send_copy
+    mov edi, edx
+    xchg ebx, edx
+    call _userspace_sanitize
+    mov eax, (-EACCES)
+    jc _syscall_send_finish
+    mov eax, edx
+    xor edx, edx
+    mov dl, _SEARCH_ALIVE_SYSTEM
+    call _search_pid
+    mov eax, (-EEXIST)
+    jc _syscall_send_finish
+    mov eax, esi
+    xor edx, edx
+    mov dl, _SOCKET_PORT
+    call _process_find_socket
+    mov eax, (-ENOENT)
+    jc _syscall_send_finish
+    mov ebp, ebx
+    mov eax, ebx
+    call _wakeup_channel
+    mov ebx, ebp
+    xor edx, edx
+    mov eax, edx
+    lea ecx, [edx-1H]
+    lock cmpxchg byte [ebx+_socket.lock], cl
+    mov eax, (-EBUSY)
+    jnz _syscall_send_finish
+    mov dword [ebx+_socket.cursor], edx
+    mov esi, dword [esp]
+    mov eax, esi
+    push ebx
+    call _kmalloc
+    pop ebx
+    mov ecx, esi
+    mov esi, eax
+    mov eax, (-ENOMEM)
+    jc _syscall_send_finish
+    mov dword [ebx+_socket.buffer], esi
+    mov dword [ebx+_socket.stand], ecx
+    xchg esi, edi
+_syscall_send_copy:
+    mov eax, ecx
+    call _copy_string
+_syscall_send_finish:
+    add esp, 4H
+    ret
+
+_syscall_receive:
+ ; in:
+ ;  ebx - socket number
+ ;  ecx - userspace buffer
+ ;  edx - userspace buffer size
+ ; out: eax - return of byte copied
+    mov edi, ecx
+    mov esi, edx
+    xchg ecx, edx
+    xchg ebx, edx
+    call _userspace_sanitize
+    mov eax, (-EACCES)
+    jc _syscall_receive_finish
+    mov eax, edx
+    mov ebx, dword [_current]
+    xor edx, edx
+    mov dl, _SOCKET_FILDE
+    call _process_find_socket
+    mov eax, (-ENOENT)
+    jc _syscall_receive_finish
+    movzx eax, byte [ebx+_socket.lock]
+    test eax, eax
+    jz _syscall_receive_finish    
+    mov ecx, dword [ebx+_socket.stand]
+    cmp ecx, esi
+    cmova ecx, esi
+    sub dword [ebx+_socket.stand], ecx
+    jnz _syscall_receive_copy
+    mov byte [ebx+_socket.lock], 0H
+_syscall_receive_copy:
+    mov esi, dword [ebx+_socket.buffer]
+    add esi, dword [ebx+_socket.cursor]
+    add dword [ebx+_socket.cursor], ecx
+    mov eax, ecx
+    call _copy_string    
+_syscall_receive_finish:
+    ret
+
+_syscall_fshsck:
+ ; in: ebx - socket filde number
+ ; out:
+ ;  eax - 0H if the syscall succeed
+ ;  ebp - [_current]
+ ;  esi - socket object pointer
+ ;   cf - set on error
+    mov eax, ebx
+    mov ebp, dword [_current]
+    mov ebx, ebp
+    xor edx, edx
+    mov dl, _SOCKET_FILDE
+    call _process_find_socket
+    mov eax, (-ENOENT)
+    jc _syscall_fshsck_exit
+    xor eax, eax
+    mov byte [ebx+_socket.lock], al
+    mov dword [ebx+_socket.stand], eax
+    mov dword [ebx+_socket.cursor], eax
+    xchg eax, dword [ebx+_socket.buffer]
+    mov esi, ebx
+    call _kfree
+    mov eax, (-EFAULT)
+    jc _syscall_fshsck_exit
+    xor eax, eax
+_syscall_fshsck_exit:
+    ret
+
+_syscall_unbind:
+ ; in: ebx - socket filde number
+ ;  eax - 0H if the syscall succeed
+ ;  ebp - [_current]
+ ;  esi - socket object pointer
+ ;   cf - set on error
+    call _syscall_fshsck
+    jc _syscall_unbind_exit
+    movzx eax, byte [esi+_socket.bind]
+    test al, al
+    jz _syscall_unbind_exit
+    xor ecx, ecx
+    mov byte [esi+_socket.bind], cl
+    xchg cx, word [esi+_socket.port]
+    lea eax, [ebp+_process.ports]
+    call _convert_port_bitmap
+    xor ecx, ecx
+    inc cl
+    mov edi, _BITMAP_RESET
+    call _bitmap_inverse
+    mov eax, (-EFAULT)
+    jc _syscall_unbind_exit
+    xor eax, eax
+_syscall_unbind_exit:
+    ret
+
+_syscall_close:
+ ; in: ebx - socket number
+ ; out:
+ ;  eax - 0H if the syscall succeed
+ ;  ebp - [_current]
+ ;   cf - set on error
+    call _syscall_unbind
+    jc _syscall_close_exit
+    lea ebx, [esi+_socket.list]
+    lea edx, [ebp+_process.socket]
+    call _remove_list_entry
+    mov eax, (-EFAULT)
+    jc _syscall_close_exit
+    mov edi, _socket_cache
+    call _deallocate_from_cache
+    mov eax, (-EFAULT)
+    jc _syscall_close_exit
+    xor eax, eax
+_syscall_close_exit:
+    ret
+
+_syscall_clsall:
+    mov ebp, dword [_current]
+    xor eax, eax
+_syscall_clsall_loop:
+    mov ebx, dword [ebp+_process.socket]
+    test ebx, ebx
+    jz _syscall_clsall_exit
+    mov ebx, dword [ebx-_socket.list+_socket.filde]
+    call _syscall_close
+    jnc _syscall_clsall_loop
+_syscall_clsall_exit:
+    ret
+
+_md5_s:
+    db 007H, 00CH, 011H, 016H, 007H, 00CH, 011H, 016H, 007H, 00CH, 011H, 016H, 007H, 00CH, 011H, 016H
+    db 005H, 009H, 00EH, 014H, 005H, 009H, 00EH, 014H, 005H, 009H, 00EH, 014H, 005H, 009H, 00EH, 014H
+    db 004H, 00BH, 010H, 017H, 004H, 00BH, 010H, 017H, 004H, 00BH, 010H, 017H, 004H, 00BH, 010H, 017H
+    db 006H, 00AH, 00FH, 015H, 006H, 00AH, 00FH, 015H, 006H, 00AH, 00FH, 015H, 006H, 00AH, 00FH, 015H
+_md5_s_end:
+
+_md5_K:
+    dd 0D76AA478H, 0E8C7B756H, 0242070DBH, 0C1BDCEEEH
+    dd 0F57C0FAFH, 04787C62AH, 0A8304613H, 0FD469501H
+    dd 0698098D8H, 08B44F7AFH, 0FFFF5BB1H, 0895CD7BEH
+    dd 06B901122H, 0FD987193H, 0A679438EH, 049B40821H
+    dd 0F61E2562H, 0C040B340H, 0265E5A51H, 0E9B6C7AAH
+    dd 0D62F105DH, 002441453H, 0D8A1E681H, 0E7D3FBC8H
+    dd 021E1CDE6H, 0C33707D6H, 0F4D50D87H, 0455A14EDH
+    dd 0A9E3E905H, 0FCEFA3F8H, 0676F02D9H, 08D2A4C8AH
+    dd 0FFFA3942H, 08771F681H, 06D9D6122H, 0FDE5380CH
+    dd 0A4BEEA44H, 04BDECFA9H, 0F6BB4B60H, 0BEBFBC70H
+    dd 0289B7EC6H, 0EAA127FAH, 0D4EF3085H, 004881D05H
+    dd 0D9D4D039H, 0E6DB99E5H, 01FA27CF8H, 0C4AC5665H
+    dd 0F4292244H, 0432AFF97H, 0AB9423A7H, 0FC93A039H
+    dd 0655B59C3H, 08F0CCC92H, 0FFEFF47DH, 085845DD1H
+    dd 06FA87E4FH, 0FE2CE6E0H, 0A3014314H, 04E0811A1H
+    dd 0F7537E82H, 0BD3AF235H, 02AD7D2BBH, 0EB86D391H
+_md5_K_end:
+
+struct _md5_context _acc0*, _acc1*, _acc2*, _acc3*, _A*, _B*, _C*, _D*, _F*, _g*
+    .acc0:  dd (_acc0)
+    .acc1:  dd (_acc1)
+    .acc2:  dd (_acc2)
+    .acc3:  dd (_acc3)
+    .A:     dd (_A)
+    .B:     dd (_B)
+    .C:     dd (_C)
+    .D:     dd (_D)
+    .F:     dd (_F)
+    .g:     dd (_g)
+ends
+
+_MD5_DIGEST = 020H
+_syscall_md5:
+ ; in:
+ ;  ebx - plain text
+ ;  ecx - plain text size
+ ;  edx - chipher buffer
+    push ebx edx
+    sub esp, _md5_context.sizeof
+    mov dword [esp+_md5_context.acc0], 067452301H
+    mov dword [esp+_md5_context.acc1], 0EFCDAB89H
+    mov dword [esp+_md5_context.acc2], 098BADCFEH
+    mov dword [esp+_md5_context.acc3], 010325476H
+    mov esi, ecx
+    call _userspace_sanitize
+    mov eax, (-EFAULT)  
+    jc _syscall_md5_exit
+    mov ebx, edx
+    xor ecx, ecx
+    mov cl, _MD5_DIGEST
+    call _userspace_sanitize
+    mov eax, (-EFAULT)
+    jc _syscall_md5_exit
+    lea ecx, [esi+1H+8H] ; size + extra '1' + 8 byte size message
+    ;XXX
+    shr ecx, 6H
+    lea eax, [ecx+1H]
+    mov ebp, eax
+    shl eax, 6H ; round up to the next 64-byte size
+    mov edi, eax
+    call _kmalloc
+    mov ebx, eax
+    mov eax, (-ENOMEM)
+    jc _syscall_md5_exit
+    mov ecx, edi
+    mov edi, ebx
+    call _clear_string
+    xor ecx, ecx
+    mov cl, 8H
+    mov eax, esi
+    mul ecx
+    sub edi, 8H
+    stosd
+    mov eax, edx
+    stosd
+    mov edi, ebx
+    mov ecx, esi
+    mov esi, dword [esp+_md5_context.sizeof+4H]
+    call _copy_string
+    mov al, 080H
+    stosb
+_syscall_md5_loop:
+    lea esi, [esp+_md5_context.acc0]
+    lea edi, [esp+_md5_context.A]
+    xor ecx, ecx
+    mov cl, 010H
+    call _copy_string
+    xor ecx, ecx
+_syscall_md5_nested:
+    cmp cl, 00FH
+    jbe _syscall_md5_branch_1
+    cmp cl, 01FH
+    jbe _syscall_md5_branch_2
+    cmp cl, 02FH
+    jbe _syscall_md5_branch_3
+    cmp cl, 03FH
+    jbe _syscall_md5_branch_4
+    mov eax, (-ERANGE)
+    jmp _syscall_md5_exit
+_syscall_md5_branch_1:
+    mov eax, dword [esp+_md5_context.B]
+    mov edx, eax
+    and eax, dword [esp+_md5_context.C]
+    not edx
+    and edx, dword [esp+_md5_context.D]
+    or eax, edx
+    mov edx, ecx
+    jmp _syscall_md5_update
+_syscall_md5_branch_2:
+    mov eax, dword [esp+_md5_context.D]
+    mov edx, eax
+    and eax, dword [esp+_md5_context.B]
+    not edx
+    and edx, dword [esp+_md5_context.C]
+    or eax, edx
+    imul edx, ecx, 5H
+    inc edx
+    jmp _syscall_md5_align
+_syscall_md5_branch_3:
+    mov eax, dword [esp+_md5_context.B]
+    xor eax, dword [esp+_md5_context.C]
+    xor eax, dword [esp+_md5_context.D]
+    imul edx, ecx, 3H
+    add edx, 5H
+    jmp _syscall_md5_align
+_syscall_md5_branch_4:
+    mov eax, dword [esp+_md5_context.D]
+    not eax
+    or eax, dword [esp+_md5_context.B]
+    xor eax, dword [esp+_md5_context.C]
+    imul edx, ecx, 7H
+_syscall_md5_align:
+    and edx, (010H - 1H)
+_syscall_md5_update:
+    add eax, dword [esp+_md5_context.A]
+    add eax, dword [_md5_K+ecx*4H]
+    add eax, dword [ebx+edx*4H]
+    mov dword [esp+_md5_context.F], eax
+    mov dword [esp+_md5_context.g], edx ; for consistency
+    mov edx, eax
+    mov eax, dword [esp+_md5_context.D]
+    mov dword [esp+_md5_context.A], eax
+    mov eax, dword [esp+_md5_context.C]
+    mov dword [esp+_md5_context.D], eax
+    mov eax, dword [esp+_md5_context.B]
+    mov dword [esp+_md5_context.C], eax
+    mov esi, ecx
+    movzx ecx, byte [_md5_s+ecx]
+    rol edx, cl
+    add eax, edx
+    mov dword [esp+_md5_context.B], eax
+    mov ecx, esi
+    inc cl
+    cmp cl, 040H
+    jb _syscall_md5_nested
+ define _count 0H
+ irp _target*, A,B,C,D
+ {
+  rept 1H _index:(_count), _next:(_count + 1H)
+  \{
+    mov eax, dword [esp+_md5_context.\#_target]
+    add dword [esp+_md5_context.acc\#_index], eax
+    define _count _next
+  \}
+ }
+    dec ebp
+    jnz _syscall_md5_loop
+    mov eax, ebx
+    call _kfree
+    mov eax, (-EFAULT)
+    jc _syscall_md5_exit
+ rept 4H i:0H
+ {
+    mov edx, dword [esp+_md5_context.acc#i]
+    bswap edx
+    mov edi, dword [esp+_md5_context.sizeof]
+    add edi, (i shl 3H)
+    call _itoa_hexadecimal
+ }
+    xor eax, eax
+_syscall_md5_exit:
+    add esp, (_md5_context.sizeof+8H)
+    ret
+
+struct _sha1_context _A*, _B*, _C*, _D*, _E*
+    .A:     dd (_A)
+    .B:     dd (_B)
+    .C:     dd (_C)
+    .D:     dd (_D)
+    .E:     dd (_E)
+ends
+
+_syscall_sha1:
+ ; in:
+ ;  ebx - plain text
+ ;  ecx - plain text size
+ ;  edx - chipher buffer
+    lddqu xmm0, xword [_test]
+    lddqu xmm1, xword [_test+010H]
+    lddqu xmm2, xword [_mask]
+    lddqu xmm3, xword [_message]
+    pshufb xmm3, xmm2
+    paddd xmm1, xmm3
+    movdqa xmm4, xmm0
+    sha1rnds4 xmm0, xmm1, 0H
+    lddqu xmm3, xword [_message+010H]
+    pshufb xmm3, xmm2
+    sha1nexte xmm4, xmm3
+    sha1rnds4 xmm0, xmm4, 0H
+    sha1msg1 xmm0, xmm0
+    sha1msg2 xmm0, xmm0
+    ret
+
+align 010H
+_test:
+    dd 0x10325476, 0x98BADCFE, 0xEFCDAB89, 0x67452301
+    dd 0H, 0H, 0H, 0xC3D2E1F0
+db 0H
+_message:
+    db "HELLO", 080H
+    align 8H
+    dq 0H, 0H, 0H, 0H, 0H
+
+_mask:
+    dq 0x08090a0b0c0d0e0f
+    dq 0x0001020304050607
+
+_syscall_sha2:
+ ; in:
+ ;  ebx - plain text
+ ;  ecx - plain text size
+ ;  edx - chipher buffer
+    ret
+
+_syscall_des:  ; XXX
+
+_AES_SBOX_0H_0H = 063H
+_aes_sbox:
+    db _AES_SBOX_0H_0H, 07CH, 077H, 07BH, 0F2H, 06BH, 06FH, 0C5H, 030H, 001H, 067H, 02BH, 0FEH, 0D7H, 0ABH, 076H
+    db            0CAH, 082H, 0C9H, 07DH, 0FAH, 059H, 047H, 0F0H, 0ADH, 0D4H, 0A2H, 0AFH, 09CH, 0A4H, 072H, 0C0H
+    db            0B7H, 0FDH, 093H, 026H, 036H, 03FH, 0F7H, 0CCH, 034H, 0A5H, 0E5H, 0F1H, 071H, 0D8H, 031H, 015H
+    db            004H, 0C7H, 023H, 0C3H, 018H, 096H, 005H, 09AH, 007H, 012H, 080H, 0E2H, 0EBH, 027H, 0B2H, 075H
+    db            009H, 083H, 02CH, 01AH, 01BH, 06EH, 05AH, 0A0H, 052H, 03BH, 0D6H, 0B3H, 029H, 0E3H, 02FH, 084H
+    db            053H, 0D1H, 000H, 0EDH, 020H, 0FCH, 0B1H, 05BH, 06AH, 0CBH, 0BEH, 039H, 04AH, 04CH, 058H, 0CFH
+    db            0D0H, 0EFH, 0AAH, 0FBH, 043H, 04DH, 033H, 085H, 045H, 0F9H, 002H, 07FH, 050H, 03CH, 09FH, 0A8H
+    db            051H, 0A3H, 040H, 08FH, 092H, 09DH, 038H, 0F5H, 0BCH, 0B6H, 0DAH, 021H, 010H, 0FFH, 0F3H, 0D2H
+    db            0CDH, 00CH, 013H, 0ECH, 05FH, 097H, 044H, 017H, 0C4H, 0A7H, 07EH, 03DH, 064H, 05DH, 019H, 073H
+    db            060H, 081H, 04FH, 0DCH, 022H, 02AH, 090H, 088H, 046H, 0EEH, 0B8H, 014H, 0DEH, 05EH, 00BH, 0DBH
+    db            0E0H, 032H, 03AH, 00AH, 049H, 006H, 024H, 05CH, 0C2H, 0D3H, 0ACH, 062H, 091H, 095H, 0E4H, 079H
+    db            0E7H, 0C8H, 037H, 06DH, 08DH, 0D5H, 04EH, 0A9H, 06CH, 056H, 0F4H, 0EAH, 065H, 07AH, 0AEH, 008H
+    db            0BAH, 078H, 025H, 02EH, 01CH, 0A6H, 0B4H, 0C6H, 0E8H, 0DDH, 074H, 01FH, 04BH, 0BDH, 08BH, 08AH
+    db            070H, 03EH, 0B5H, 066H, 048H, 003H, 0F6H, 00EH, 061H, 035H, 057H, 0B9H, 086H, 0C1H, 01DH, 09EH
+    db            0E1H, 0F8H, 098H, 011H, 069H, 0D9H, 08EH, 094H, 09BH, 01EH, 087H, 0E9H, 0CEH, 055H, 028H, 0DFH
+    db            08CH, 0A1H, 089H, 00DH, 0BFH, 0E6H, 042H, 068H, 041H, 099H, 02DH, 00FH, 0B0H, 054H, 0BBH, 016H
+_aes_sbox_end:
+
+_aes_rcon:
+    db 001H, 002H, 004H, 008H, 010H
+    db 020H, 040H, 080H, 01BH, 036H
+_aes_rcon_end:
+
+_aes_SubBytes:
+ ; in: eax - chipher block
+ ; out: eax - updated chipher block
+ ; preserves: eax, edx
+    mov esi, eax
+    mov edi, eax
+    xor ecx, ecx
+_aes_SubBytes_loop:
+    mov ebx, dword [edi]
+    call _aes_SubBytes_translate
+    stosd
+    inc cl
+    cmp cl, 4H
+    jb _aes_SubBytes_loop
+    mov eax, esi
+    ret
+_aes_SubBytes_translate:
+ ; in: ebx - dword to translate
+ ; out: eax - translated dword
+ ; preserves: ecx, edx, esi, edi
+    mov ebp, edx
+    mov edx, ebx
+    mov eax, ((_AES_SBOX_0H_0H shl 018H) or (_AES_SBOX_0H_0H shl 010H) or (_AES_SBOX_0H_0H shl 8H) or _AES_SBOX_0H_0H)
+_aes_SubBytes_translate_loop:
+    test edx, edx
+    jz _aes_SubBytes_translate_exit
+    movzx ebx, dl
+    shl eax, 8H
+    mov al, byte [_aes_sbox+ebx]
+    shr edx, 8H 
+    jmp _aes_SubBytes_translate_loop
+_aes_SubBytes_translate_exit:
+    bswap eax
+    mov edx, ebp
+    ret
+
+_aes_ShiftRows:
+ ; in: eax - chipher block
+ ; out: eax - updated chipher block
+ ; preserves: eax, edx, esi, edi, ebp
+    test byte [_singleton.ssse3], 1H
+    jnz _aes_ShiftRows_smid
+    mov ecx, edx
+    mov bl, byte [eax+4H]
+ rept 3H _index:5H
+ {
+    mov dl, byte [eax+_index]
+    mov byte [eax+_index-1H], dl
+ }
+    mov byte [eax+7H], bl
+ rept 2H _index:8H
+ {
+    mov dl, byte [eax+_index]
+    xchg byte [eax+_index+2H], dl
+    mov byte [eax+_index], dl
+ }
+    mov bl, byte [eax+00FH]
+ irp _index, 00EH,00DH,00CH
+ {
+    mov dl, byte [eax+_index]
+    mov byte [eax+_index+1H], dl
+ }
+    mov byte [eax+00CH], bl
+    mov edx, ecx
+    jmp _aes_ShiftRows_exit
+_aes_ShiftRows_smid:
+    movdqu xmm0, xword [eax]
+    pshufb xmm0, xword [_aes_ShiftRows_mask]
+    movdqu xword [eax], xmm0
+_aes_ShiftRows_exit:
+    ret
+align 010H
+_aes_ShiftRows_mask:
+    db 000H, 001H, 002H, 003H
+    db 005H, 006H, 007H, 004H
+    db 00AH, 00BH, 008H, 009H
+    db 00FH, 00CH, 00DH, 00EH
+
+_aes_MixColumns:
+ ; in: eax - chipher block
+ ; out: eax - updated chipher block
+ ; preserves: eax, edx
+    sub esp, 8H ; ([esp] - [esp+3H]) -> copy, ([esp+4H] - [esp+7H]) -> copy * 2H
+    mov ebp, edx
+    xor ecx, ecx
+_aes_MixColumns_loop:
+    lea esi, [eax+ecx]
+    xor edi, edi
+_aes_MixColumns_nested:
+    mov dl, byte [esi+edi*4H]
+    mov byte [esp+edi], dl
+    mov bl, dl
+    shl dl, 1H
+    shr bl, 7H
+    jz _aes_MixColumns_add
+    mov bl, 01BH
+_aes_MixColumns_add:
+    xor dl, bl
+    mov byte [esp+edi+4H], dl
+    inc edi
+    cmp edi, 4H
+    jb _aes_MixColumns_nested
+    mov dl, byte [esp+4H]
+    xor dl, byte [esp+4H+1H]
+    xor dl, byte [esp+1H]
+    xor dl, byte [esp+2H]
+    xor dl, byte [esp+3H]
+    mov byte [esi], dl ; [2H, 3H, 1H, 1H]
+    mov dl, byte [esp]
+    xor dl, byte [esp+4H+1H]
+    xor dl, byte [esp+4H+2H]
+    xor dl, byte [esp+2H]
+    xor dl, byte [esp+3H]
+    mov byte [esi+4H], dl ; [1H, 2H, 3H, 1H]
+    mov dl, byte [esp]
+    xor dl, byte [esp+1H]
+    xor dl, byte [esp+4H+2H]
+    xor dl, byte [esp+4H+3H]
+    xor dl, byte [esp+3H]
+    mov byte [esi+8H], dl ; [1H, 1H, 2H, 3H]
+    mov dl, byte [esp+4H]
+    xor dl, byte [esp]
+    xor dl, byte [esp+1H]
+    xor dl, byte [esp+2H]
+    xor dl, byte [esp+4H+3H]
+    mov byte [esi+00CH], dl ; [3H, 1H, 1H, 2H]
+    inc cl
+    cmp cl, 4H
+    jb _aes_MixColumns_loop
+_aes_MixColums_exit:
+    mov edx, ebp
+    add esp, 8H
+    ret
+
+_aes_AddRoundKey:
+ ; in:
+ ;  eax - chipher block
+ ;  edx - round key (aligned & unaligned 16-byte)
+ ; out: eax - updated chipher block
+ ; preserves: eax, ebx, edx, esi, edi, ebp
+    test byte [_singleton.sse2], 1H
+    jnz _aes_AddRoundKey_smid
+ rept 4H i:0H
+ {
+    mov ecx, dword [edx+i*4H]
+    xor dword [eax+i*4H], ecx
+ }
+    jmp _aes_AddRoundKey_exit
+_aes_AddRoundKey_smid:
+    movdqu xmm0, xword [eax]
+    movdqu xmm1, xword [edx]
+    pxor xmm0, xword xmm1
+    movdqu xword [eax], xmm0
+_aes_AddRoundKey_exit:
+    ret
+
+_aes_KeySchedule:
+ ; in:
+ ;  ecx - round number
+ ;  edx - round key
+ ; out: edx - updated round key
+ ; preserves: eax, edx
+    mov esi, eax
+    movzx ecx, byte [_aes_rcon+ecx]
+    mov byte [_aes_KeySchedule_smid], cl
+    mov edi, ecx
+    mov cl, 3H
+    call _aes_KeySchedule_clextr
+    test byte [_singleton.sse41], 1H
+    jz _aes_KeySchedule_legacy
+    test byte [_singleton.aes], 1H
+    jz _aes_KeySchedule_legacy
+    pinsrd xmm0, ebx, 1B
+    aeskeygenassist xmm0, xmm0, 0H
+    label _aes_KeySchedule_smid byte at ($ - 1H)
+    pextrd eax, xmm0, 1B
+    jmp _aes_KeySchedule_loop
+_aes_KeySchedule_legacy:
+    ror ebx, 8H
+    call _aes_SubBytes_translate
+    xor eax, edi
+_aes_KeySchedule_loop:
+ rept 4H i:0H
+ {
+  if ((i) <> 0H)
+    mov cl, i
+  else
+    xor cl, cl
+  end if
+    call _aes_KeySchedule_clextr
+    xor ebx, eax
+    mov eax, ebx
+    call _aes_KeySchedule_clinst
+ }
+    mov eax, esi
+    ret
+_aes_KeySchedule_clextr:
+ ; in:
+ ;  ecx - wanted columns
+ ;  edx - round key
+ ; out: ebx - columns extracted
+ ; preserves: eax, ecx, edx, esi, edi, ebp
+    cmp ecx, 4H
+    cmc
+    jc _aes_KeySchedule_clextr_exit
+    test byte [_singleton.ssse3], 1H
+    jz _aes_KeySchedule_clextr_legacy
+    mov byte [_aes_KeySchedule_clextr_smid], cl
+    movdqu xmm0, xword [edx]
+    pshufb xmm0, xword [_aes_KeySchedule_mask]
+    pextrd ebx, xmm0, 0H
+    label _aes_KeySchedule_clextr_smid byte at ($ - 1H)
+    jmp _aes_KeySchedule_clextr_exit
+_aes_KeySchedule_clextr_legacy:
+    movzx ebx, byte [edx+ecx]
+ rept 3H i:1H
+ {
+    ror ebx, 8H
+    or bl, byte [edx+ecx+(i*4H)]
+ }
+    ror ebx, 8H
+_aes_KeySchedule_clextr_exit:
+    ret
+_aes_KeySchedule_clinst:
+ ; in:
+ ;  ecx - wanted columns
+ ;  ebx - columns to insert
+ ;  edx - round key
+ ; preserves: eax, ecx, edx, esi, edi, ebp
+    cmp ecx, 4H
+    cmc
+    jc _aes_KeySchedule_clinst_exit
+    test byte [_singleton.ssse3], 1H
+    jz _aes_KeySchedule_clinst_legacy
+    mov byte [_aes_KeySchedule_clinst_simd], cl
+    movdqu xmm0, xword [edx]
+    pshufb xmm0, xword [_aes_KeySchedule_mask]
+    pinsrd xmm0, ebx, 0H
+    label _aes_KeySchedule_clinst_simd byte at ($ - 1H)
+    pshufb xmm0, xword [_aes_KeySchedule_mask]
+    movdqu xword [edx], xmm0
+    jmp _aes_KeySchedule_clinst_exit
+_aes_KeySchedule_clinst_legacy:
+ rept 4H i:0H
+ {
+    mov byte [edx+ecx+(i*4H)], bl
+    shr ebx, 8H
+ }
+_aes_KeySchedule_clinst_exit:
+    ret
+align 010H
+_aes_KeySchedule_mask:
+    db 000H, 004H, 008H, 00CH
+    db 001H, 005H, 009H, 00DH
+    db 002H, 006H, 00AH, 00EH
+    db 003H, 007H, 00BH, 00FH
+
+_aesenc_init_round:
+ ; in:
+ ;  eax - chipher block
+ ;  edx - round key
+ ; out:
+ ;  eax - updated chipher block
+ ;  edx - updated round key
+ ; preserves: eax, edx
+    call _aes_AddRoundKey
+    xor ecx, ecx
+    jmp _aes_KeySchedule
+
+_aesenc_round:
+ ; in:
+ ;  eax - chipher block
+ ;  ecx - round count
+ ;  edx - round key
+ ; out:
+ ;  eax - updated chipher block
+ ;  ecx - updated round count
+ ;  edx - updated round key
+ ; preserves: eax, edx
+    push ecx
+    test byte [_singleton.aes], 1H
+    jnz _aesenc_round_smid
+    call _aes_SubBytes
+    call _aes_ShiftRows
+    call _aes_MixColumns
+    call _aes_AddRoundKey
+    jmp _aesenc_round_exit
+_aesenc_round_smid:
+    movdqu xmm0, xword [eax]
+    movdqu xmm1, xword [edx]
+    pshufb xmm0, [_aes_KeySchedule_mask]
+    pshufb xmm1, [_aes_KeySchedule_mask]
+    aesenc xmm0, xmm1
+    pshufb xmm0, [_aes_KeySchedule_mask]
+    movdqu xword [eax], xmm0
+_aesenc_round_exit:
+    mov ecx, dword [esp]
+    call _aes_KeySchedule
+    pop ecx
+    inc ecx
+    ret
+
+_aesenc_final_round:
+ ; in:
+ ;  eax - chipher block
+ ;  edx - round key
+ ; out: eax - updated chipher block
+ ; preserves: eax, edx
+    test byte [_singleton.aes], 1H
+    jnz _aesenc_final_round_smid
+    call _aes_SubBytes
+    call _aes_ShiftRows
+    call _aes_AddRoundKey
+    jmp _aesenc_final_round_exit
+_aesenc_final_round_smid:
+    movdqu xmm0, xword [eax]
+    movdqu xmm1, xword [edx]
+    pshufb xmm0, [_aes_KeySchedule_mask]
+    pshufb xmm1, [_aes_KeySchedule_mask]
+    aesenclast xmm0, xmm1
+    pshufb xmm0, [_aes_KeySchedule_mask]
+    movdqu xword [eax], xmm0
+_aesenc_final_round_exit:
+    ret
+
+_syscall_aesenc_ecb:
+ ; in:
+ ;  ebx - plain text
+ ;  ecx - plain text size
+ ;  edx - key (assume 16-byte)
+ ;  esi - output buffer
+ ;  edi - output size
+    sub esp, (020H + 8H)
+    test ecx, ecx
+    jz _syscall_aesenc_ecb_exit-2H
+    mov esi, ebx
+    mov edi, ecx
+    mov ebp, edx
+    call _userspace_sanitize
+    mov eax, (-EFAULT)
+    jc _syscall_aesenc_ecb_exit
+    mov ebx, edx
+    xor ecx, ecx
+    mov cl, 010H
+    call _userspace_sanitize
+    mov eax, (-EFAULT)
+    jc _syscall_aesenc_ecb_exit
+    mov eax, esi
+    mov ebx, edi
+    mov esi, ebp
+    mov edi, esp
+    xor ecx, ecx
+    mov cl, 010H
+    call _copy_string_user
+    mov esi, ebp
+    mov cl, 010H
+    call _copy_string
+    mov esi, eax
+    mov edi, ebx
+    mov eax, edi
+    shrd ecx, eax, 4H
+    shr eax, 4H
+    jecxz $+3H
+    inc eax
+    mov dword [esp+020H], eax
+    shl eax, 4H 
+    mov ebp, eax
+    call _kmalloc
+    mov dword [esp+024H], eax
+    mov eax, (-ENOMEM)
+    jc _syscall_aesenc_ecb_exit
+    mov ecx, ebx
+    xchg edi, ecx
+    sub ebp, ecx
+    call _copy_string_user
+    mov ecx, ebp
+    call _clear_string
+    mov eax, dword [esp+024H]
+_syscall_aesenc_ecb_loop:
+    lea edi, [esp+010H]
+    mov edi, esp
+    xor ecx, ecx
+    mov cl, 010H
+    call _copy_string
+    lea edx, [esp+010H]
+    call _aesenc_init_round
+    xor ecx, ecx
+    inc cl
+ rept 9H { call _aesenc_round }
+    call _aesenc_final_round
+    add eax, 010H
+    dec dword [esp+020H]
+    jnz _syscall_aesenc_ecb_loop
+    mov eax, dword [esp+024H]
+    call _kfree
+    xor eax, eax
+_syscall_aesenc_ecb_exit:
+    add esp, (020H + 8H)
+    ret
+
+_syscall_aesenc_cbc:
+    ret
+
+_syscall_aesdec:
+    ret
+
 _syscall_read:
  ; in:
  ;  ebx - tty number
@@ -5633,6 +7080,8 @@ WCOREFLAG = 200H
 _syscall_exit:
  ; in: ebx - exit code status
     call _switch_mapping_kernel
+    call _syscall_clsall ; close all opened socket with the current process
+    jc _panic
     mov esi, dword [_current]
     mov dword [esi+_process.extcde], ebx
     mov dword [esi+_process.state], _PROCESS_ZOMBIE
@@ -5643,7 +7092,8 @@ _syscall_exit:
     ;XXX
     ;mov ebx, esi
     ;call _syscall_daemon_dettach
-    mov edi, dword [_initproc]
+    mov ebp, dword [_initproc]
+    mov edi, ebp
     cmp esi, edi
     jnz _syscall_exit_scheduler
     cmp byte [esi+_process.panic], 0H
@@ -5652,6 +7102,10 @@ _syscall_exit:
 _syscall_exit_scheduler:
     cmp esi, dword [_scheduler]
     jz _panic
+    mov ebx, esi
+    mov esi, _syscall_exit_reparent
+    call _process_iterate_childs
+    mov esi, ebx
 _syscall_exit_migrate:
     lea eax, dword [esi+_process.childs]
     lea edx, dword [edi+_process.childs]
@@ -5675,6 +7129,9 @@ _syscall_exit_wakeinit:
 _syscall_exit_allzmbs:
     cmp dword [ebx+_process.state], _PROCESS_ZOMBIE
     jmp _invert_zero_carry
+_syscall_exit_reparent:
+    mov dword [ebx+_process.parent], ebp
+    ret
 
 ; WIFEXITED(x)      -> (((x) and 07FH) = 0H)
 ; WIFSIGNALED(x)    -> (((((x) and 07FH) + 1H) shr 1H) > 0H)
@@ -5873,9 +7330,14 @@ _syscall_wait:
     jmp _syscall_waitpid
 
 _syscall_test:
-    movzx eax, byte [_tty1.fground]
-    mov eax, dword [_tty1.grpdesc]
-    mov eax, dword [eax+_process_group_descriptor.pgid]
+    ;movzx eax, byte [_tty1.fground]
+    ;mov eax, dword [_tty1.grpdesc]
+    ;mov eax, dword [eax+_process_group_descriptor.pgid]
+_def:
+    jmp _USER_CODE_VIRTUAL
+    ;mov eax, 0DEADH
+    ;mov ebx, dword [_current]
+    ;call _sleep_channel
     ret
 
 _syscall_daemon:
@@ -5944,8 +7406,15 @@ _syscall_suid_exit:
     ret
 
 _syscall_gpid:
+ ; out: eax - current process id
+ ; preserves: ebx, ecx, edx, esi, edi, ebp
     mov eax, dword [_current]
     mov eax, dword [eax+_process.pid]
+    ret
+
+_syscall_gtid:
+    mov eax, dword [_current]
+    mov eax, dword [eax+_process.tid]
     ret
 
 _syscall_gppid:
@@ -5974,7 +7443,9 @@ _syscall_gsid_exit:
     ret
 
 _syscall_ssid:
- ; out: cf - set on error
+ ; out:
+ ;  eax - new session id
+ ;   cf - set on error
     mov esi, dword [_current]
     cmp byte [esi+_process.grplead], 0H
     mov eax, (-EPERM)
@@ -6207,8 +7678,8 @@ _syscall_sigmask:
  ;  ebx - signal kind
  ;  ecx - signal action kind
  ; out: eax = 0H if success or errno
-    mov eax, (-EINVAL)
     call _sanitize_signal
+    mov eax, (-EINVAL)
     jc _syscall_sigmask_exit
     cmp ecx, SIGUNBLOCK
     ja _syscall_sigmask_exit
@@ -6217,7 +7688,7 @@ _syscall_sigmask:
     mov edi, _BITMAP_SET
     cmp ecx, SIGUNBLOCK
     cmovz edi, eax
-    lea eax, dword [esi+_process.sigmask]
+    lea eax, [esi+_process.sigmask]
     call _convert_signal_bitmask
     xor ecx, ecx
     inc cl
@@ -6676,7 +8147,7 @@ _syscall_exec_exit:
     ret
 
 _syscall_argcpy:
- ; note: copy the argument memory aréa from the parent to the child
+ ; note: copy the argument memory area from the parent to the child
     mov ebx, _USER_SHELL_ARGUMENT_VIRTUAL
     call _page_present
     jc _syscall_argcpy_notmap
@@ -6685,6 +8156,8 @@ _syscall_argcpy:
     mov eax, (-EFAULT)
     jbe _syscall_argcpy_exit
     mov ebp, dword [ebx+_process.parent]
+    cmp ebp, dword [_initproc]
+    jz _syscall_argcpy_notmap ; meaning the child has been reparented
     mov eax, dword [ebp+_process.mapping]
     xor edx, edx
     call _store_temporary_1
@@ -6987,7 +8460,13 @@ _keyboard_irq_local_insert:
 _keyboard_irq_local_exit:
     ret
 
-irp _kind*,_com2_irq,_com1_irq,_lpt2_irq,_floppy_irq,_lpt1_irq,_rtc_irq,_vga_retrace_irq,_mouse_irq,_fpu_irq,_hdd_irq,_ign_irq
+_fpu_irq:
+    clts
+    fnclex
+    ;jmp _fpu_error
+    ret
+
+irp _kind*,_com2_irq,_com1_irq,_lpt2_irq,_floppy_irq,_lpt1_irq,_rtc_irq,_vga_retrace_irq,_mouse_irq,_hdd_irq,_ign_irq
 {
 _kind:
     ret
@@ -7003,6 +8482,10 @@ _idt_reset:
     ret
 
 _reboot_system:
+    test byte [_singleton.apic], 1H
+    jz _reboot_system_legacy
+    ; XXX send INIT IPI
+_reboot_system_legacy:
     call _idt_reset
     ud2
 
@@ -7016,12 +8499,15 @@ _power_off:
 rept 0FFH i:0H
 {
 _interrupt_stub_#i:
-    if ((i <> 8H) & (i <> 00AH) & (i <> 00BH) & (i <> 00CH) & (i <> 00DH) & (i <> 00EH) & (i <> 011H))
-        pushd 0H
-    end if
+ if ((i <> 8H) & (i <> 00AH) & (i <> 00BH) & (i <> 00CH) & (i <> 00DH) & (i <> 00EH) & (i <> 011H))
+    pushd 0H
+ end if
     pushd i
     jmp _interrupt_handler
 }
+
+;_spurious_interrupt:
+;    iret
 
 include "vm86.inc"
 
@@ -7058,9 +8544,28 @@ _kind:
 }
 
 _device_not_available:
-    mov ebx, dword [_current]
-    mov byte [ebx+_process.dna], (not 0H)
+    mov esi, dword [_current]
+    mov al, byte [esi+_process.dna]
+    test al, al
+    jnz _device_not_available_retreive
+    not al
+    mov byte [esi+_process.dna], al
+    mov eax, _FXSAVE_TOTAL
+    call _kmalloc
+    ;jc _device_not_available_finish
+    ;jc _panic XXX
+    mov dword [esi+_process.restore], eax
+    mov edi, eax
+    mov esi, _fpu_init
+    mov ecx, _FXSAVE_TOTAL
+    call _copy_string
+    jmp _device_not_available_clear
+_device_not_available_retreive:
+    mov eax, dword [esi+_process.restore]
+_device_not_available_clear:
     clts
+    fxrstor [eax]
+_device_not_available_finish:
     ret
 
 irp _kind*, _nmi,_double_fault,_intel_rsvd,_machine_check,_virtualization_error,_control_protection,_vmm_error,_security_error
@@ -7175,7 +8680,7 @@ _interrupt_handler_table:
     dd _vmm_error
     dd _security_error
     dd _intel_rsvd
-    assert ((($- _interrupt_handler_table) shr 2H) = _INTEL_RESERVED_INT)
+    assert ((($ - _interrupt_handler_table) shr 2H) = _INTEL_RESERVED_INT)
     dd _pit_irq
     dd _keyboard_irq
     dd _ign_irq
@@ -7356,7 +8861,7 @@ _execute_real_terminate:
     stosd
     mov eax, dword [esp+_vm86_x86_register.register.eax]
     stosd
-    mov dword [esp+_vm86_x86_register.register+_PUSHA_ALL], esi
+    mov dword [esp+_vm86_x86_register.register+_PUSHA_TOTAL], esi
     call _addressing_real_revert
     popa
     pop esp
@@ -7478,6 +8983,10 @@ _tss_vm86_end:
 rept 040H { dd 0H }
 _kernel_stack:
 
+align _FXSAVE_TOTAL
+_fpu_init: db _FXSAVE_TOTAL dup 0H
+_default_mxcsr: dd (_MXCSR_PM or _MCXSR_UM or _MXCSR_OM or _MXCSR_ZM or _MXCSR_DM or _MXCSR_IM)
+
 align 4H
 _test_bitmap_table _bitmap 0H
 
@@ -7509,11 +9018,20 @@ include "color.inc"
 include "resolution.inc"
 include "clear.inc"
 include "sigint.inc"
+include "client.inc"
+include "server.inc"
+include "sockpoc.inc"
+include "sqrt.inc"
+include "md5.inc"
 include "shell.inc"
 include "login.inc"
 include "init.inc"
+include "bomb.inc"
 include "vdso.inc"
 
 _extract _init, _vdso
 
 _kernel_end:
+
+_debugs _abc, _def, _interrupt_stub_49
+

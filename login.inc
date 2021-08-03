@@ -1,6 +1,6 @@
 
 _USERNAME_MAX = 010H
-_PASSWORD_MAX = 010H
+_PASSWORD_MAX = _MD5_DIGEST
 
 struct _record _username*, _password*, _uid*
     .username   string _username
@@ -83,7 +83,8 @@ _login_start:
     mov al, _SYSCALL_READ
     mov ebx, _TELETYPE_CURRENT
     lea ecx, [ebp+_record.username]
-    mov edx, _USERNAME_MAX
+    xor edx, edx
+    mov dl, _USERNAME_MAX
     int 030H
     test eax, eax
     jz $+7H
@@ -101,12 +102,24 @@ _login_start:
     mov al, _SYSCALL_READ
     mov ebx, _TELETYPE_CURRENT
     lea ecx, [ebp+_record.password]
-    mov edx, _PASSWORD_MAX
+    xor edx, edx
+    mov dl, _PASSWORD_MAX
+
     mov esi, ebp
+
     int 030H
+    mov esi, eax
     test eax, eax
-    jz $+7H
+    jnz $+8H
     mov byte [ecx+eax-1H], 0H
+    dec esi
+    mov ebx, ecx
+    mov edx, ecx
+    mov ecx, esi
+    xor eax, eax
+    mov al, _SYSCALL_MD5
+    int 030H
+
     mov ebx, _login_record
     mov edx, ((_login_record_end - _login_record) / _record.sizeof)
 _login_loop:
@@ -195,9 +208,9 @@ _login_tcsetsf:
     ret
 
 _login_record:
-    _maoko  _record "maoko", "lidt", _ROOT_UID
-    _louis  _record "louis", "offsetof", _ROOT_UID
-    _guest  _record "guest", "guest", _GUEST_UID
+    _maoko _record "maoko", "E13F65CB8405426C5DF4D661DEEE221E",  _ROOT_UID
+    _louis _record "louis", "AEBD920A5BF16E5B4518162A29EA728A",  _ROOT_UID
+    _guest _record "guest", "084E0343A0486FF05530DF6C705C8BB4", _GUEST_UID
 _login_record_end:
 
 _login_username string "login: "
@@ -206,6 +219,9 @@ _login_incorrect string "login incorrect", 00AH
 _login_newline: dw 00A0AH
 _login_tty string "(tty_)"
 _login_clear string _ESCAPE, _ESCAPE_CLEAR
+;align 010H
+;_login_aes_key string "AssemblyIsBetter"
+;assert (_login_aes_key.sizeof = 010H)
 _extract _shell
 _login.sizeof = ($ - $$)
 end virtual

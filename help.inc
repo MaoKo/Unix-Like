@@ -39,6 +39,9 @@ _help_command string\
     "usertest           - test new stuff (segfault, undefined opcode ...)", 00AH,\
     "segvtest           - experiment a segmentation fault", 00AH,\
     "sigint             - use sigint to quit the program", 00AH,\
+    "sockpoc            - test the server - client idiom", 00AH,\
+    "sqrt               - simple routine to compute sqrt", 00AH,\
+    "md5 hash           - hash input string to md5", 00AH,\
     "kill signal pid    - send the signal to the process", 00AH,\
     "uid                - show the current uid", 00AH,\
     "uname              - show the version of the OS", 00AH,\

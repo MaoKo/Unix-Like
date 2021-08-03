@@ -2,7 +2,8 @@
 virtual at _USER_VDSO_VIRTUAL
 _vdso::
 _vdso_sigret:
-    mov eax, _SYSCALL_SIGRET
+    xor eax, eax
+    mov al, _SYSCALL_SIGRET
     int 030H
 _vdso_sysenter:
     pop ebp edx ecx
@@ -77,4 +78,3 @@ _vdso_is_digit_exit:
 
 _vdso.sizeof = ($ - $$)
 end virtual
-
