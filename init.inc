@@ -1,6 +1,8 @@
 
 virtual at _USER_CODE_VIRTUAL
 _init::
+match,DEBUG
+{
     xor eax, eax
     mov al, _SYSCALL_SHA1
     int 030H
@@ -27,6 +29,7 @@ _aes_key:
     db 07EH, 0AEH, 0F7H, 0CFH
     db 015H, 0D2H, 015H, 04FH
     db 016H, 0A6H, 088H, 03CH
+}
 
     xor eax, eax
     mov al, _SYSCALL_FORK

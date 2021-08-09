@@ -3,7 +3,7 @@ _KERNEL_START = 0200000H
 assert (~(_KERNEL_START and _PAGE_OFFSET_MASK))
 
 format ELF executable 3H at _KERNEL_START
-entry _kernel_setup
+entry _kernel_start
 use32
 
 include "system.inc"
@@ -212,6 +212,19 @@ struct _io_apic_entry _io_apic_id*, _io_apic_version*, _io_apic_flags*, _io_apic
     .io_apic_address:   dd (_io_apic_address)
 ends
 
+_INTERRUPT_INT          = 0H
+_INTERRUPT_NMI          = 1H
+_INTERRUPT_SMI          = 2H
+_INTERRUPT_EXTINT       = 3H
+_INTERRUPT_PO           _bitwise 011B, 0H
+_INTERRUPT_PO_CONFORM   = 000B ; only relevant when EL = LEVEL, default to low
+_INTERRUPT_PO_HIGH      = 001B
+_INTERRUPT_PO_LOW       = 011B
+_INTERRUPT_EL           _bitwise 011B, 2H
+_INTERRUPT_EL_CONFORM   = 000B ; default to edge
+_INTERRUPT_EL_EDGE      = 001B
+_INTERRUPT_EL_LEVEL     = 011B
+
 _IO_INTERRUPT_FLAGS_PO = (1H shl 0H)
 _IO_INTERRUPT_FLAGS_EL = (1H shl 1H)
 struct _io_interrupt_entry _interrupt_type*, _io_interrupt_flags*, _source_bus_id*,\
@@ -237,6 +250,17 @@ struct _local_interrupt_entry _interrupt_type*, _io_interrupt_flags*, _source_bu
     .destination_local_apic_id:     db (_destination_local_apic_id)
     .destination_local_apic_lintin: db (_destination_local_apic_lintin)
 ends
+
+struct _mp_predicate _procentry*, _busentry*, _ioapicentry*, _iointentry*, _lcintentry*
+    .procentry:     dd (_procentry)
+    .busentry:      dd (_busentry)
+    .ioapicentry:   dd (_ioapicentry)
+    .iointentry:    dd (_iointentry)
+    .lcintentry:    dd (_lcintentry)
+ends
+assert (((_mp_predicate.procentry shr 2H) = _PROCESSOR_ENTRY) & ((_mp_predicate.busentry shr 2H) = _BUS_ENTRY) &\
+    ((_mp_predicate.ioapicentry shr 2H) = _IO_APIC_ENTRY) & ((_mp_predicate.iointentry shr 2H) = _IO_INTERRUPT_ENTRY) &\
+    ((_mp_predicate.lcintentry shr 2H) = _LOCAL_INTERRUPT_ENTRY))
 
 _RSDP_MAGIC = "RSD PTR "
 struct _rsdp_descriptor_1 _signature*, _checksum*, _oemid*, _revision*, _rsdt_address*
@@ -379,6 +403,18 @@ page_table _real_pgtable
     _real_identity 0H
 end page_table
 
+_kernel_magic: dd 0H
+
+_kernel_disable_nmi:
+    mov al, _CMOS_DISABLE_NMI
+    out _CMOS_SELECT, al
+    ret
+
+_kernel_enable_nmi:
+    xor al, al
+    out _CMOS_SELECT, al
+    ret
+
 _kernel_setup_paging:
  ; in:
  ;  eax - cr4 flags
@@ -393,19 +429,22 @@ _kernel_setup_paging:
     mov cr0, edx
     ret
 
+_kernel_start:
+    mov dword [_kernel_magic], eax
+    call _kernel_disable_nmi
 _kernel_setup:
     org (_KERNEL_VIRTUAL + _kernel_setup)
     mov esi, _default_directory_mapping
     mov cr3, esi
     mov esi, cr0
-    or esi, (_CR0_PG or _CR0_WP); or _CR0_NE or _CR0_MP)
+    or esi, (_CR0_PG or _CR0_WP); or _CR0_MP or _CR0_NE)
     and esi, (not (_CR0_CD or _CR0_NW or _CR0_AM or _CR0_TS or _CR0_EM))
     mov cr0, esi
     wbinvd
     mov edi, _kernel_setup_linear
-    jmp edi
+    jmp edi ; clear prefetch queue
 _kernel_setup_linear:
-    cmp eax, _GRUB1_MULTIBOOT
+    cmp dword [_kernel_magic], _GRUB1_MULTIBOOT
     jnz _kernel_setup_error
     mov eax, dword [ebx+_multiboot_info.flags]
     test eax, _MULTIBOOT_MEM
@@ -443,8 +482,14 @@ _kernel_setup_continue:
     wrmsr
 _kernel_setup_feature:
     mov eax, cr4
-    or eax, (_CR4_PSE or _CR4_PGE or _CR4_PCE or _CR4_OSFXSR or _CR4_OSXMMEXCPT)
+    or eax, (_CR4_PSE or _CR4_PGE or _CR4_PCE or _CR4_DE)
     and eax, (not _CR4_TSD)
+    test byte [_singleton.fxsr], 1H
+    jz $+5H
+    or eax, _CR4_OSFXSR
+    test byte [_singleton.sse], 1H
+    jz $+5H
+    or eax, _CR4_OSXMMEXCPT
     test byte [_singleton.xsave], 1H
     jz _kernel_setup_security
     or eax, _CR4_OSXSAVE
@@ -467,6 +512,9 @@ _kernel_setup_security:
     test byte [_singleton.vme], 1H
     jz $+5H
     or eax, _CR4_VME
+    test byte [_singleton.mce], 1H
+    jz $+5H
+    or eax, _CR4_MCE
     mov ebx, (_page_directory or _MEMORY_WB)
     test byte [_singleton.pae], 1H
     jz $+7H
@@ -486,17 +534,20 @@ _kernel_setup_mtrr:
     mov ecx, _MTRR_CAP
     rdmsr
     test eax, _MTRR_CAP_FIX
-    jz _kernel_setup_mtrr_wc
-    mov byte [_singleton.fix], 1H
-_kernel_setup_mtrr_wc:
+    jz $+8H
+    inc byte [_singleton.fixmtrr]
     test eax, _MTRR_CAP_WC
-    jz _kernel_setup_mtrr_enable
-    mov byte [_singleton.wc], 1H
-_kernel_setup_mtrr_enable:
+    jz $+8H
+    inc byte [_singleton.wc]
+    test eax, _MTRR_CAP_SMRR
+    jz $+8H
+    inc byte [_singleton.smrr]
+    and eax, _MTRR_CAP_VCNT_MASK
+    mov byte [_singleton.varmtrr], al
     mov ecx, _MTRR_DEF_TYPE
     rdmsr
     mov eax, (_MTRR_DEF_TYPE_E or _MTRR_TYPE_WB)
-    test byte [_singleton.fix], 1H
+    test byte [_singleton.fixmtrr], 1H
     jz $+5H
     or eax, _MTRR_DEF_TYPE_FE
     wrmsr

@@ -89,13 +89,14 @@ macro align _power*, _padding:0H
 }
 
 _MAX_REAL_ADDRESS = ((0FFFFH shl 4H) + 0FFFFH)
-_CMOS_ENABLE_NMI = (1H shl 7H)
+_CMOS_DISABLE_NMI = (1H shl 7H)
 _CMOS_SELECT = 070H
 _CMOS_PORT = 071H
 _RESET_CODE_BYTE = 00FH
 _BIOS_JUMP_EOI = 5H
 _BIOS_JUMP = 00AH ; without EOI
 _WARN_RESET_VECTOR = ((040H shl 4H) + 067H)
+_COPROCESSOR_ERROR = 0F0H
 
 _CR0_PE     = (1H shl 0H)
 _CR0_MP     = (1H shl 1H)
@@ -264,6 +265,7 @@ _PAT_MASK       = 111B
 _IA32_CR_PAT    = 277H
 
 _MTRR_CAP           = 0FEH
+_MTRR_CAP_VCNT_MASK = 0FFH
 _MTRR_CAP_FIX       = (1H shl 8H)
 _MTRR_CAP_WC        = (1H shl 00AH)
 _MTRR_CAP_SMRR      = (1H shl 00BH)
@@ -275,6 +277,22 @@ _MTRR_TYPE_WC       = 1H
 _MTRR_TYPE_WT       = 4H
 _MTRR_TYPE_WP       = 5H
 _MTRR_TYPE_WB       = 6H
+_MTRR_PHYS_BASE_0   = 200H
+_MTRR_PHYS_MASK_0   = 201H
+_MTRR_PHYS_BASE_1   = 202H
+_MTRR_PHYS_MASK_1   = 203H
+_MTRR_PHYS_BASE_2   = 204H
+_MTRR_PHYS_MASK_2   = 205H
+_MTRR_PHYS_BASE_3   = 206H
+_MTRR_PHYS_MASK_3   = 207H
+_MTRR_PHYS_BASE_4   = 208H
+_MTRR_PHYS_MASK_4   = 209H
+_MTRR_PHYS_BASE_5   = 20AH
+_MTRR_PHYS_MASK_5   = 20BH
+_MTRR_PHYS_BASE_6   = 20CH
+_MTRR_PHYS_MASK_6   = 20DH
+_MTRR_PHYS_BASE_7   = 20EH
+_MTRR_PHYS_MASK_7   = 20FH
 _MTRR_PHYS_MASK_V   = (1H shl 00BH)
 _MTRR_FIX_64K_00000 = 250H
 _MTRR_FIX_16K_80000 = 258H
@@ -287,6 +305,9 @@ _MTRR_FIX_4K_E0000  = 26CH
 _MTRR_FIX_4K_E8000  = 26DH
 _MTRR_FIX_4K_F0000  = 26EH
 _MTRR_FIX_4K_F8000  = 26FH
+_MTRR_PENTIUM       = 8H
+_SMRR_PHYSBASE      = 1F2H
+_SMRR_PHYSMASK      = 1F3H
 
 _EFER           = 0C0000080H
 _EFER_SCE       = (1H shl 0H)
@@ -317,6 +338,8 @@ _IRET       = 0CFH
 _CLI        = 0FAH
 _STI        = 0FBH
 _HLT        = 0F4H
+_RDMSR      = 0320FH
+_WRMSR      = 0300FH
 
 _PUSHA_EDI      = 000H
 _PUSHA_ESI      = 004H
@@ -327,6 +350,27 @@ _PUSHA_EDX      = 014H
 _PUSHA_ECX      = 018H
 _PUSHA_EAX      = 01CH
 _PUSHA_TOTAL    = 020H
+
+_EXCEPTION_DIVIDE_BY_ZERO               = 0H
+_EXCEPTION_DEBUG                        = 1H
+_EXCEPTION_NMI                          = 2H
+_EXCEPTION_BREAKPOINT                   = 3H
+_EXCEPTION_OVERFLOW                     = 4H
+_EXCEPTION_ARRAY_BOUND_CHECK            = 5H
+_EXCEPTION_INVALID_OPCODE               = 6H
+_EXCEPTION_DEVICE_NOT_AVAILABLE         = 7H
+_EXCEPTION_DOUBLE_FAULT                 = 8H
+_EXCEPTION_COPROCESSOR_SEGMENT_OVERRUN  = 9H
+_EXCEPTION_INVALID_TSS                  = 00AH
+_EXCEPTION_SEGMENT_NOT_PRESENT          = 00BH
+_EXCEPTION_STACK                        = 00CH
+_EXCEPTION_GENERAL_PROTECTION           = 00DH
+_EXCEPTION_PAGE_FAULT                   = 00EH
+_EXCEPTION_FPU                          = 010H
+_EXCEPTION_ALIGNEMENT_CHECK             = 011H
+_EXCEPTION_MACHINE_CHECK                = 012H
+_EXCEPTION_SMID                         = 013H
+_EXCEPTION_VIRTUALIZATION               = 014H
 
 _IRET_EIP   = 000H
 _IRET_CS    = 004H
@@ -363,6 +407,10 @@ _CPUID_LEAF_EXTEND_INFO         = 080000001H
 _CPUID_LEAF_VIRTPHYSIZE         = 080000008H
 
 _CPUID_EAX_XSAVES       = (1H shl 3H)
+_CPUID_EBX_LINSZMSK     = (0FFH shl _CPUID_EBX_LINSZSHT)
+_CPUID_EBX_LINSZSHT     = 8H
+_CPUID_EBX_LPROCMSK     = (0FFH shl _CPUID_EBX_LPROCSHT)
+_CPUID_EBX_LPROCSHT     = 010H
 _CPUID_EBX_FSGSBASE     = (1H shl 0H)
 _CPUID_EBX_BMI1         = (1H shl 3H)
 _CPUID_EBX_SMEP         = (1H shl 7H)
@@ -376,21 +424,27 @@ _CPUID_EDX_DE           = (1H shl 2H)
 _CPUID_EDX_PSE          = (1H shl 3H)
 _CPUID_EDX_MSR          = (1H shl 5H)
 _CPUID_EDX_PAE          = (1H shl 6H)
+_CPUID_EDX_MCE          = (1H shl 7H)
 _CPUID_EDX_APIC         = (1H shl 9H)
 _CPUID_EDX_SEP          = (1H shl 00BH)
-_CPUID_EDX_MTRR         = (1H shr 00CH)
+_CPUID_EDX_MTRR         = (1H shl 00CH)
 _CPUID_EDX_PGE          = (1H shl 00DH)
+_CPUID_EDX_MCA          = (1H shl 00EH)
+_CPUID_EDX_CMOV         = (1H shl 00FH)
 _CPUID_EDX_PAT          = (1H shl 010H)
 _CPUID_EDX_PSE36        = (1H shl 011H)
+_CPUID_EDX_CLFLUSH      = (1H shl 013H)
 _CPUID_EDX_NX           = (1H shl 014H)
 _CPUID_EDX_MMX          = (1H shl 017H)
 _CPUID_EDX_FXSR         = (1H shl 018H)
 _CPUID_EDX_SSE          = (1H shl 019H)
 _CPUID_EDX_SSE2         = (1H shl 01AH)
+_CPUID_EDX_HTT          = (1H shl 01CH)
 _CPUID_ECX_SSE3         = (1H shl 0H)
 _CPUID_ECX_PCLMULQDQ    = (1H shl 1H)
 _CPUID_ECX_UMIP         = (1H shl 2H)
 _CPUID_ECX_PKU          = (1H shl 3H)
+_CPUID_ECX_VMX          = (1H shl 5H)
 _CPUID_ECX_SSSE3        = (1H shl 9H)
 _CPUID_ECX_PCID         = (1H shl 011H)
 _CPUID_ECX_SSE41        = (1H shl 013H)
@@ -407,22 +461,92 @@ _SYSENTER_CS_MSR    = 174H
 _SYSENTER_ESP_MSR   = 175H
 _SYSENTER_EIP_MSR   = 176H
 
-_SM_BASE        = 30000H
+_POWER_ON_RESTART_ADDRESS           = 0FFFFFFF0H
+_SM_BASE                            = 30000H
+_BOCHS_SM_BASE                      = 00A0000H
+_SM_ENTRY_POINT                     = 08000H
+_SM_REVISION_ID_MASK                = 0FFFFH
+_SM_REVISION_IO_RESTART             = (1H shl 010H)
+_SM_REVISION_BASE_RELOCATION        = (1H shl 011H)
+_SM_AUTO_HALT                       = 1H
+
+_SM_IA32_STATE_SAVE_SMBASE          = 07EF8H
+_SM_IA32_STATE_SAVE_REVISION        = 07EFCH
+_SM_IA32_STATE_SAVE_IO_RESTART      = 07F00H
+_SM_IA32_STATE_SAVE_HALT_RESTART    = 07F02H
+;_SM_STATE_SAVE_
+_SM_IA32_STATE_SAVE_ES              = 07FA8H
+_SM_IA32_STATE_SAVE_CS              = 07FACH
+_SM_IA32_STATE_SAVE_SS              = 07FB0H
+_SM_IA32_STATE_SAVE_DS              = 07FB4H
+_SM_IA32_STATE_SAVE_FS              = 07FB8H
+_SM_IA32_STATE_SAVE_GS              = 07FBCH
+_SM_IA32_STATE_SAVE_TR              = 07FC4H
+_SM_IA32_STATE_SAVE_DR7             = 07FC8H
+_SM_IA32_STATE_SAVE_DR6             = 07FCCH
+_SM_IA32_STATE_SAVE_EAX             = 07FD0H
+_SM_IA32_STATE_SAVE_ECX             = 07FD4H
+_SM_IA32_STATE_SAVE_EDX             = 07FD8H
+_SM_IA32_STATE_SAVE_EBX             = 07FDCH
+_SM_IA32_STATE_SAVE_ESP             = 07FE0H
+_SM_IA32_STATE_SAVE_EBP             = 07FE4H
+_SM_IA32_STATE_SAVE_ESI             = 07FE8H
+_SM_IA32_STATE_SAVE_EDI             = 07FECH
+_SM_IA32_STATE_SAVE_EIP             = 07FF0H
+_SM_IA32_STATE_SAVE_EFLAGS          = 07FF4H
+_SM_IA32_STATE_SAVE_CR3             = 07FF8H
+_SM_IA32_STATE_SAVE_CR0             = 07FFCH
+
+_SM_IA32E_STATE_SAVE_CR0            = 07FF8H
+
+_BOCHS_SMI_COMMAND_IO       = 0B2H
+
+_MCG_CAP        = 179H
+_MCG_STATUS     = 17AH
+_MCG_CTL        = 17BH
+_MCG_MISC       = 18AH
+_MCG_CAP_COUNT_MASK = 0FFH
+_MCG_CAP_MCG_CTL_P  = (1H shl 8H)
+_MCG_CAP_MCG_EXT_P  = (1H shl 9H)
+_MCG_CAP_MCG_CMCI_P = (1H shl 00AH)
+_MCG_CAP_MCG_TES_P  = (1H shl 00BH)
+_MCG_STATUS_RIPV    = (1H shl 0H)
+_MCG_STATUS_EIPV    = (1H shl 1H)
+_MCG_STATUS_MCIP    = (1H shl 2H)
+
+_MCG_MISC_DS        = (1H shl 0H)
 
 _FS_BASE        = 0C0000100H
 _GS_BASE        = 0C0000101H
 _KERNEL_GS_BASE = 0C0000102H
 
-_DEFAULT_LOCAL_APIC = 0FEE00000H
-_DEFAULT_IO_APIC    = 0FEC00000H
+_TSC    = 010H ; executing rdtsc(p) is the same as reading this MSR
 
+_PERF_CTR_0 = 0C1H
+_PERF_CTR_1 = 0C2H
+
+_IA32_VMX_BASIC         = 480H
+_VMCS_REVISION_ID       = 0H
+_VMCS_ABORT_INDICATOR   = 4H
+
+_DEFAULT_LOCAL_APIC     = 0FEE00000H
+_DEFAULT_IO_APIC        = 0FEC00000H
+
+_APIC_DELIVERY_FIXED    = (000B shl 8H)
+_APIC_DELIVERY_SMI      = (010B shl 8H)
+_APIC_DELIVERY_NMI      = (100B shl 8H)
+_APIC_DELIVERY_INIT     = (101B shl 8H)
+_APIC_DELIVERY_EXTINT   = (111B shl 8H)
+_APIC_LEVEL_TRIGGER     = (1H shl 00FH)
+_APIC_POLARITY_LOW      = (1H shl 00DH)
+
+; LOCAL APIC
 _IA32_APIC_BASE     = 01BH
 _APIC_BASE_BSP      = (1H shl 8H)
 _APIC_BASE_EXTD     = (1H shl 00AH)
 _APIC_BASE_EN       = (1H shl 00BH)
 _APIC_BASE_ADDRESS  = (1H shl 00CH)
 
-; LOCAL APIC
 _LOCAL_APIC_BASE_MSR                = 800H
 _LOCAL_APIC_ID_REGISTER             = 020H
 ;_LOCAL_APIC_ID_REGISTER_MSR     = (_LOCAL_APIC_BASE_MSR + 2H)
@@ -430,7 +554,7 @@ _LOCAL_APIC_VERSION_REGISTER        = 030H
 _TASK_PRIORITY_REGISTER             = 080H
 _ARBITRATION_PRIORITY_REGISTER      = 090H
 _PROCESSOR_PRIORITY_REGISTER        = 0A0H
-_EOI_REGISTER                       = 0B0H
+_LOCAL_EOI_REGISTER                 = 0B0H
 _REMOTE_READ_REGISTER               = 0C0H
 _LOGICAL_DESTINATION_REGISTER       = 0D0H
 _DESTINATION_FORMAT_REGISTER        = 0E0H
@@ -452,7 +576,18 @@ _TIMER_CURRENT_COUNT_REGISTER       = 390H
 _TIMER_DIVIDE_CONFIG_REGISTER       = 3E0H
 
 ; IO APIC
-_INDEX_REGISTER                     = 0H
+_INDEX_REGISTER                     = 000H
+_DATA_REGISTER                      = 010H
+_IRQ_PIN_ASSERTION_REGISTER         = 020H
+_IO_EOI_REGISTER                    = 040H
+; IO APIC INDEX
+_IDENTIFICATION_REGISTER            = 000H
+_IO_APIC_VERSION_REGISTER           = 001H
+_IO_APIC_VERSION_MASK               = 0FFH
+_IO_APIC_VERSION_PRQ                = (1H shl 00FH)
+_IO_APIC_VERSION_IRQ_RT_MASK        = 0FFH
+_IO_APIC_VERSION_IRQ_RT_SHIFT       = 010H
+_REDIRECTION_TABLE_BASE             = 010H
 
 _LVT_LINT_VECTOR_MASK       = 0FFH
 _LVT_LINT_DELIVERY_FIXED    = (000B shl 8H)
@@ -504,25 +639,30 @@ rept 010H i:0H
 _IA32_PKRS = 6E1H
 
 _IA32_MISC_ENABLE               = 1A0H
+_MISC_FAST_STRING_ENABLE        = (1H shl 0H)
 _MISC_ENABLE_FOPCODE            = (1H shl 2H) 
 _MISC_ENABLE_THERMAL_MONITOR    = (1H shl 3H)
+_MISC_SPLIT_LOCK_DISABLE        = (1H shl 4H)
+_MISC_FERR_INTERRUPT_REPORT     = (1H shl 00AH)
 _MISC_ENABLE_XD_DISABLE         = (1H shl 022H)
 
 _SP_FP_SGNSHT       = 01FH
-_SP_FP_EXPMSK       = (((1H shl ((_SP_FP_SGNSHT - 1H) - _SP_FP_EXPSHT + 1H)) - 1H) shl _SP_FP_EXPSHT)
+_SP_FP_EXPMSK       = (((1H shl (_SP_FP_SGNSHT - _SP_FP_EXPSHT)) - 1H) shl _SP_FP_EXPSHT)
 _SP_FP_EXPSHT       = 017H
 _SP_FP_FRCMSK       = (((1H shl _SP_FP_EXPSHT) - 1H) shl _SP_FP_FRCSHT)
 _SP_FP_FRCSHT       = 0H
+_SP_FP_BIAS         = 0H
 
 _DP_FP_SNGSHT       = 03FH
-_DP_FP_EXPMSK       = (((1H shl ((_DP_FP_SNGSHT - 1H) - _DP_FP_EXPSHT + 1H)) - 1H) shl _DP_FP_EXPSHT)
+_DP_FP_EXPMSK       = (((1H shl (_DP_FP_SNGSHT - _DP_FP_EXPSHT)) - 1H) shl _DP_FP_EXPSHT)
 _DP_FP_EXPSHT       = 034H
 _DP_FP_FRCMSK       = (((1H shl _DP_FP_EXPSHT) - 1H) shl _DP_FP_FRCSHT)
 _DP_FP_FRCSHT       = 0H
+_DP_FP_BIAS         = 0H
 
 _DEP_FP_SNGSHT      = 04FH
-;_DEP_FP_EXPMSK      = (((1H shl ((_DEP_FP_SNGSHT - 1H) - _DEP_FP_EXPSHT + 1H)) - 1H) shl _DEP_FP_EXPSHT)
-;_DEP_FP_EXPMSK = (1H shl 080H)
+_DEP_FP_EXPMSK_HIGH = (((1H shl ((_DEP_FP_SNGSHT - 1H) - _DEP_FP_EXPSHT + 1H)) - 1H) shl (_DEP_FP_EXPSHT - 040H))
+_DEP_FP_EXPMSK_LOW  = 0H
 _DEP_FP_EXPSHT      = 040H
 _DEP_FP_INTSHT      = 03FH
 _DEP_FP_FRCMSK      = (((1H shl _DEP_FP_INTSHT) - 1H) shl _DEP_FP_FRCSHT)
@@ -538,6 +678,30 @@ _SP_FP_POSITIVE_SNAN        = (_SP_FP_POSITIVE_INFINITY or 1H)
 _SP_FP_NEGATIVE_SNAN        = (_SP_FP_NEGATIVE_INFINITY or _SP_FP_POSITIVE_SNAN)
 _SP_FP_POSITIVE_DENORMAL    = 0H
 _SP_FP_NEGATIVE_DENORMAL    = 0H
+
+_DP_FP_POSITIVE_ZERO        = 0H
+_DP_FP_NEGATIVE_ZERO        = (1B shl _DP_FP_SNGSHT)
+_DP_FP_POSITIVE_INFINITY    = (_DP_FP_EXPMSK)
+_DP_FP_NEGATIVE_INFINITY    = (_DP_FP_NEGATIVE_ZERO or _DP_FP_POSITIVE_INFINITY)
+_DP_FP_POSITIVE_QNAN        = (_DP_FP_POSITIVE_INFINITY or (1H shl (_DP_FP_EXPSHT - 1H)) or 1H)
+_DP_FP_NEGATIVE_QNAN        = (_DP_FP_NEGATIVE_INFINITY or _DP_FP_POSITIVE_QNAN)
+_DP_FP_POSITIVE_SNAN        = (_DP_FP_POSITIVE_INFINITY or 1H)
+_DP_FP_NEGATIVE_SNAN        = (_DP_FP_NEGATIVE_INFINITY or _DP_FP_POSITIVE_SNAN)
+
+_DEP_FP_POSITIVE_ZERO_HIGH      = 0H
+_DEP_FP_POSITIVE_ZERO_LOW       = 0H
+_DEP_FP_NEGATIVE_ZERO_HIGH      = (1H shl (_DEP_FP_SNGSHT - 040H))
+_DEP_FP_NEGATIVE_ZERO_LOW       = _DEP_FP_POSITIVE_ZERO_LOW
+_DEP_FP_POSITIVE_INFINITY_HIGH  = _DEP_FP_EXPMSK_HIGH
+_DEP_FP_POSITIVE_INFINITY_LOW   = _DEP_FP_EXPMSK_LOW
+_DEP_FP_NEGATIVE_INFINITY_HIGH  = (_DEP_FP_NEGATIVE_ZERO_HIGH or _DEP_FP_POSITIVE_INFINITY_HIGH)
+_DEP_FP_NEGATIVE_INFINITY_LOW   = 0H
+
+_DEP_FP_POSITIVE_QNAN_HIGH      = _DEP_FP_POSITIVE_INFINITY_HIGH
+_DEP_FP_POSITIVE_QNAN_LOW       = (_DEP_FP_POSITIVE_INFINITY_LOW or (1H shl (_DEP_FP_INTSHT - 1H)) or 1H)
+
+;_DEP_FP_NEGATIVE_SNAN_HIGH      = (_DEP_FP_POSITIVE_SNAN_HIGH)
+
 
 _FCW_IM             = (1H shl 0H)
 _FCW_DM             = (1H shl 1H)
@@ -792,6 +956,21 @@ ends
 
 ;__transform_struc TSS_16, TSS_32
 
+struct DT_null
+    dq 0H
+ends
+
+struct DT_gte _access*, _wdcnt*, _select*, _offset*
+    assert (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
+    assert (((_select) >= 0H) & ((_select) <= 0FFFFH))
+    assert (((_wdcnt) >= 0H) & ((_wdcnt) <= 01FH))
+    .offset_1:  dw ((_offset) and 0FFFFH)
+    .select:    dw (_select)
+    .wdcnt:     db (_wdcnt)
+    .access:    db ((_access) and (not _DE_DESCRIPTOR))
+    .offset_2:  dw ((_offset) shr 010H)
+ends
+
 macro descriptor_table _name*, _local:0H
 {
     local _selector
@@ -996,6 +1175,12 @@ macro _salc
     lahf
     sbb al, al
     sahf
+}
+
+struc _bitwise _mask*, _shift*
+{
+    .#_MASK     = ((_mask) shl .#_SHIFT)
+    .#_SHIFT    = (_shift)
 }
 
 macro _debugs _list*&

@@ -303,6 +303,11 @@ _bitmap_match_set:
     cmp dword [ebx], not 0H
     ret
 
+_bitmap_set_to_reset:
+    mov edi, _BITMAP_SET
+    jmp _bitmap_inverse
+_bitmap_reset_to_set:
+    mov edi, _BITMAP_RESET
 _bitmap_inverse:
  ; in:
  ;  eax - bitmap pointer
