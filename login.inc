@@ -12,8 +12,8 @@ ends
 
 _TELETYPE_ID = _USER_STACK_VIRTUAL
 
-virtual at _USER_CODE_VIRTUAL
-_login::
+_user_code _login
+    ;rept 400H { nop }
     xor eax, eax
     mov al, _SYSCALL_WRITE
     mov ebx, _TELETYPE_CURRENT
@@ -110,7 +110,7 @@ _login_start:
     int 030H
     mov esi, eax
     test eax, eax
-    jnz $+8H
+    jz $+8H
     mov byte [ecx+eax-1H], 0H
     dec esi
     mov ebx, ecx
@@ -119,7 +119,6 @@ _login_start:
     xor eax, eax
     mov al, _SYSCALL_MD5
     int 030H
-
     mov ebx, _login_record
     mov edx, ((_login_record_end - _login_record) / _record.sizeof)
 _login_loop:
@@ -223,6 +222,5 @@ _login_clear string _ESCAPE, _ESCAPE_CLEAR
 ;_login_aes_key string "AssemblyIsBetter"
 ;assert (_login_aes_key.sizeof = 010H)
 _extract _shell
-_login.sizeof = ($ - $$)
-end virtual
+end _user_code
 

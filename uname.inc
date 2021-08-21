@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_uname::
+_user_code _uname
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -37,5 +36,4 @@ _uname_exit:
     int 030H   
 _uname_invalid string "uname invalid usage"
 _uname_newline string 00AH
-_uname.sizeof = ($ - $$)
-end virtual
+end _user_code

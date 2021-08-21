@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_uid::
+_user_code _uid
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -66,6 +65,5 @@ _uid_itoa_loop:
     jmp esi
 _uid_invalid string "uid invalide usage", 00AH
 _uid_root string "root", 00AH
-_uid.sizeof = ($ - $$)
-end virtual
+end _user_code
 

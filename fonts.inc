@@ -1,4 +1,6 @@
 
+; UNSCII font can be found here: http://viznut.fi/unscii/
+
 macro _glyph [_translate*]
 {
 common local _value, _char, _string

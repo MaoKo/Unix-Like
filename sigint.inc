@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_sigint::
+_user_code _sigint
     xor eax, eax
     mov al, _SYSCALL_SIGNAL
     mov ebx, SIGCONT
@@ -33,5 +32,4 @@ _sigint_sigttou:
    
 _sigint_info string "you must use CTRL-C to quit this software", 00AH
 _sigint_cont string "SIGINT continued", 00AH
-_sigint.sizeof = ($ - $$)
-end virtual
+end _user_code

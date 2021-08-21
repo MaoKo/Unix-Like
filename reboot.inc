@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_reboot::
+_user_code _reboot
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -34,5 +33,4 @@ _reboot_exit:
     int 030H
 _reboot_permission string "reboot permission denied", 00AH
 _reboot_invalid string "reboot invalid usage", 00AH
-_reboot.sizeof = ($ - $$)
-end virtual
+end _user_code

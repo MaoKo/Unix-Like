@@ -9,8 +9,7 @@ ends
 
 irp _kind*, fg,bg
 {
-    virtual at _USER_CODE_VIRTUAL
-    _#_kind::
+    _user_code _#_kind
         xor eax, eax
         mov al, _SYSCALL_ARGCPY
         int 030H
@@ -88,6 +87,5 @@ irp _kind*, fg,bg
     _#_kind#_color_table_end:
 
     _#_kind#_invalid string `_kind, " invalid usage", 00AH
-    _#_kind#.sizeof = ($ - $$)
-    end virtual
+    end _user_code
 }

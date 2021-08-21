@@ -170,14 +170,13 @@ _USER_SHELL_ARGUMENT_VIRTUAL = (_KERNEL_VIRTUAL - _PAGE_FRAME_SIZE)
 _USER_STACK_VIRTUAL = (_USER_SHELL_ARGUMENT_VIRTUAL - _PAGE_FRAME_SIZE)
 _KERNEL_STACK_SIZE = _PAGE_FRAME_SIZE
 
-_CODE_KERNEL    = (008H + _RPL0)
-_DATA_KERNEL    = (010H + _RPL0)
-_CODE_USER      = (018H + _RPL3)
-_DATA_USER      = (020H + _RPL3)
-_TSS            = 028H
-_CALL_GATE      = 030H
-_TSS_VM86       = 038H
-_GDT_TOTAL      = 8H
+_CODE_KERNEL    = (_kernel_code_segment.selector    + _RPL0)
+_DATA_KERNEL    = (_kernel_data_segment.selector    + _RPL0)
+_CODE_USER      = (_user_code_segment.selector      + _RPL3)
+_DATA_USER      = (_user_data_segment.selector      + _RPL3)
+_TSS            = _tss_segment.selector
+_CALL_GATE      = _call_gate.selector
+_TSS_VM86       = _tss_vm86_segment.selector
 
 _kernel_physical:
 
@@ -217,7 +216,8 @@ ends
 
 struct _vm86_x86_register _edi*, _esi*, _ebp*, _ebx*, _edx*, _ecx*, _eax*, __ds*, __es*, __fs*, __gs*,\
         _trap*, _error*, _eip*, _cs*, _eflags*, _esp*, _ss*, _es*, _ds*, _fs*, _gs*
-    .register   _x86_register _edi, _esi, _ebp, _ebx, _edx, _ecx, _eax, __ds, __es, __fs, __gs, _trap, _error, _eip, _cs, _eflags, _esp, _ss
+    .register   _x86_register _edi, _esi, _ebp, _ebx, _edx, _ecx, _eax,\
+                    __ds, __es, __fs, __gs, _trap, _error, _eip, _cs, _eflags, _esp, _ss
     .es:        dw (_es)
                 dw 0H
     .ds:        dw (_ds)
@@ -226,6 +226,21 @@ struct _vm86_x86_register _edi*, _esi*, _ebp*, _ebx*, _edx*, _ecx*, _eax*, __ds*
                 dw 0H
     .gs:        dw (_gs)
                 dw 0H
+ends
+
+struct _debug_context _active*, _dr0*, _dr1*, _dr2*, _dr3*, _dr6*, _dr7*
+    .active:    db (_active)
+    .dr0:       dd (_dr0)
+    .dr1:       dd (_dr1)
+    .dr2:       dd (_dr2)
+    .dr3:       dd (_dr3)
+    .dr6:       dd (_dr6)
+    .dr7:       dd (_dr7)
+ends
+
+struct _float_context _active*, _save*
+    .active:    db (_active)
+    .save:      dd (_save) ; either by fxsave or xsave
 ends
 
 _current:       dd 0H
@@ -272,9 +287,9 @@ struct _session_descriptor _sid*, _leader*, _grplist*, _teletype*, _attach*, _pr
 ends
 
 struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*, _msr*, _xcr0*, _xsave*, _xsaves*,\
-        _osxsave*, _apic*, _x2apic*, _sep*, _mtrr*, _wc*, _clflush*, _fixmtrr*, _varmtrr*, _smrr*, _fpu*, _mmx*,\
-        _vme*, _de*, _smap*, _smep*, _avx*, _sse*, _sse2*, _sse3*, _ssse3*, _sse41*, _sse42*, _aes*, _pclmulqdq*,\
-        _fxsr*, _fsgsbase*, _rdseed*, _sha*, _umip*, _pcid*, _bmi1*, _bmi2*, _vmx*, _mce*, _mca*, _htt*, _lproc*, _linsz*
+        _osxsave*, _apic*, _x2apic*, _direoi*, _sep*, _mtrr*, _wc*, _clflush*, _fixmtrr*, _varmtrr*, _smrr*, _fpu*,\
+        _mmx*, _vme*, _de*, _smap*, _smep*, _avx*, _sse*, _sse2*, _sse3*, _ssse3*, _sse41*, _sse42*, _aes*, _pclmulqdq*,\
+        _fxsr*, _fsgsbase*, _rdseed*, _sha*, _umip*, _pcid*, _bmi1*, _bmi2*, _vmx*, _mce*, _mca*, _htt*, _acpi*, _lproc*, _linsz*
     .pae:       db (_pae)
     .maxphyaddr:db (_maxphyaddr)
     .nx:        db (_nx)
@@ -290,6 +305,7 @@ struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*,
     .osxsave:   db (_osxsave)
     .apic:      db (_apic)
     .x2apic:    db (_x2apic)
+    .direoi:    db (_direoi)
     .sep:       db (_sep)
     .mtrr:      db (_mtrr)
     .wc:        db (_wc)
@@ -324,28 +340,28 @@ struct _cpuid _pae*, _maxphyaddr*, _nx*, _pse*, _pse36*, _pge*, _pat*, _popcnt*,
     .mce:       db (_mce)
     .mca:       db (_mca)
     .htt:       db (_htt)
+    .acpi:      db (_acpi)
     .lproc:     db (_lproc)
     .linsz:     db (_linsz)
 ends
 assert (_cpuid.sizeof <= 07FH)
 
-_singleton _cpuid 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
-    0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
-
-;struct _apic_context _local_apic_base*, _io_apic_base*
-;    .local_apic_base:   dd (_local_apic_base)
-;    .io_apic_base:      dd (_io_apic_base)
-;ends
+_singleton _cpuid 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
+    0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
 
 _memory_size: dd 0H
 _kernel_mapping: dd 0H
 _kernel_vdso: dq 0H
-_local_apic_base: dd 0H
-_io_apic_base: dd 0H
-_io_apic_count: db 0H
-_processor_count: db 0H
-
 _page_descriptor_head: dd 0H
+
+irp _kind*, io,local
+{
+    _#_kind#_apic_base: dd 0H
+    _#_kind#_apic_mtrr_alloc: db 0H
+    _#_kind#_apic_mtrr_phys: dd 0H
+    _#_kind#_apic_mtrr_mask: dd 0H
+}
+irp _kind*, io_apic,processor { _#_kind#_count: db 0H }
 
 include "fonts.inc"
 include "bitmap.inc"
@@ -492,7 +508,8 @@ _vbe_frame_amount:  dd 0H
 _current_modeinfo   _mode_info_block 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
                         0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
 
-struct _keyboard _extended*, _scroll_lock*, _right_ctrl*, _left_ctrl*, _right_shift*, _left_shift*, _right_alt*, _left_alt*, _caps_lock*, _num_lock*
+struct _kbdste _extended*, _scroll_lock*, _right_ctrl*, _left_ctrl*, _right_shift*,\
+        _left_shift*, _right_alt*, _left_alt*, _caps_lock*, _num_lock*
     .extended:      db (_extended)
     .scroll_lock:   db (_scroll_lock)
     .right_ctrl:    db (_right_ctrl)
@@ -505,7 +522,7 @@ struct _keyboard _extended*, _scroll_lock*, _right_ctrl*, _left_ctrl*, _right_sh
     .num_lock:      db (_num_lock)
 ends
 
-_current_keyboard   _keyboard 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
+_current_keyboard   _kbdste 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H
 
 _PROCESS_STRING     = 020H
 _PROCESS_CHANNEL    = 0H
@@ -544,7 +561,7 @@ _PORT_RANGE = (_PORT_AVAILABLE shr 3H)
 enum _PROCESS_RUN, _PROCESS_ZOMBIE, _PROCESS_SLEEP, _PROCESS_STOP, _PROCESS_DEAD
 struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _tid*, _mnbrk*, _break*, _ustck*, _mapping*, _parent*, _childs*, _socket*, _sockno*, _sesdesc*, _grpdesc*,\
         _siblings_prev*, _siblings_next*, _pgroup_prev*, _pgroup_next*, _stackpf*, _pfcount*, _sigcnt*, _signst*, _sigstp*, _tty*, _waitable*, _jststp*, _jstcnt*,\
-        _vm86*, _vmflgs*, _lwreal*, _hgreal*, _mapreal*, _lckreal*, _vif*, _vip*, _extcde*, _fground_prev*, _fground_next*, _priority*, _increment*, _channel*,\
+        _vm86*, _vmflgs*, _lwreal*, _hgreal*, _mapreal*, _lckreal*, _vif*, _vip*, _extcde*, _extsig*, _fground_prev*, _fground_next*, _priority*, _increment*, _intprec*, _channel*,\
         _kstack*, _vstack*, _pgstck*, _retframe*, _vmframe*, _context*, _list_prev*, _list_next*, _name*
     .state:     dd (_state)
     .pid:       dd (_pid)
@@ -600,16 +617,17 @@ struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _tid*, _mnbrk*, _break*, _
     ;.fxsave:    dd (0H)
     ;.extwhy:    dd (0H)
 
-    .dna:       db 0H
-    .restore:   dd 0H
+    .fltctx     _float_context 0H, 0H
+    .dbgctx     _debug_context 0H, 0H, 0H, 0H, 0H, 0H, 0H
+    .align:     db 0H
 
     .extcde:    dd (_extcde)
-
-    .extsig:    db 0H
+    .extsig:    db (_extsig)
 
     ;.fground    _linked _fground_prev, _fground_next
     .priority:  dd (_priority)
     .increment: dd (_increment)
+    .intprec:   db (_intprec)
     .channel:   dd (_channel)
     .kstack:    dd (_kstack) ; kernel task stack (in TSS.esp0)
     .vstack:    dd (_vstack)
@@ -619,10 +637,49 @@ struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _tid*, _mnbrk*, _break*, _
     .context:   dd (_context) ; point into kernel task stack where a saved eip reside (context switch entry point)
     .list       _linked _list_prev, _list_next
     .name       string _name
-    times       (_PROCESS_STRING - .name.sizeof) db 0H
+    times       (_PROCESS_STRING - .name.sizeof) db 0H ; XXX
 ends
 
-_frame  _bitmap ((200000000H shr 00CH) shr 3H)
+struct _pci_configuration_header _vendor_id*, _device_id*, _command_register*, _status_register*, _revision_id*,\
+        _class_code*, _cache_line_size*, _latency_timer*, _header_type*, _bist*
+    .vendor_id:         dw (_vendor_id)
+    .device_id:         dw (_device_id)
+    .command_register:  dw (_command_register)
+    .status_register:   dw (_status_register)
+    .revision_id:       db (_revision_id)
+    .class_code:        dw ((_class_code) and 0FFFFH)
+                        db ((_class_code) shr 010H)
+    .cache_line_size:   db (_cache_line_size)
+    .latency_timer:     db (_latency_timer)
+    .header_type:       db (_header_type)
+    .bist:              db (_bist)
+ends
+
+struct _pci_header_device _vendor_id*, _device_id*, _command_register*, _status_register*, _revision_id*,\
+        _class_code*, _cache_line_size*, _latency_timer*, _bist*, _bar0*, _bar1*, _bar2*, _bar3*, _bar4*, _bar5*,\
+        _cardbus_cis*, _subsystem_vendor_id*, _subsystem_id*, _expansion_rom*, _capabilities*, _interrupt_line*,\
+        _interrupt_pin*, _min_gnt*, _max_lat*
+    .header                 _pci_configuration_header _vendor_id, _device_id, _command_register, _status_register,\
+                                _revision_id, _class_code, _cache_line_size, _latency_timer, _PCI_HEADER_DEVICE, _bist
+    .bar0:                  dd (_bar0)
+    .bar1:                  dd (_bar1)
+    .bar2:                  dd (_bar2)
+    .bar3:                  dd (_bar3)
+    .bar4:                  dd (_bar4)
+    .bar5:                  dd (_bar5)
+    .cardbus_cis:           dd (_cardbus_cis)
+    .subsystem_vendor_id:   dw (_subsystem_vendor_id)
+    .subsystem_id:          dw (_subsystem_id)
+    .expansion_rom:         dd (_expansion_rom)
+    .capabilities:          db (_capabilities)
+    .reserved:              db 7H dup 0H
+    .interrupt_line:        db (_interrupt_line)
+    .interrupt_pin:         db (_interrupt_pin)
+    .min_gnt:               db (_min_gnt)
+    .max_lat:               db (_max_lat)
+ends
+
+_frame _bitmap ((200000000H shr 00CH) shr 3H)
 _pid_table _bitmap 080H
 
 _kernel_entry:
@@ -661,16 +718,12 @@ _kernel_entry_xsave:
     or eax, _EFER_NXE
     wrmsr
 _kernel_entry_efer:
-    pushd _GDT
-    pushw ((_GDT_TOTAL shl 3H) - 1H)
-    lgdt fword [esp]
-    add esp, 6H
-    pushd _IDT
-    pushw ((0FFH shl 3H) - 1H)
-    lidt fword [esp]
-    add esp, 6H
+    _load_descriptor_table gdt, _GDT
+    _load_descriptor_table idt, _IDT
     mov ax, _TSS
     ltr ax
+    xor ax, ax  
+    lldt ax
     jmp far _CODE_KERNEL:_kernel_entry_setup
 _kernel_entry_setup:
     mov ax, _DATA_KERNEL
@@ -685,6 +738,21 @@ _kernel_entry_setup:
     ldmxcsr dword [_default_mxcsr]
 _kernel_entry_default:
     call _kernel_enable_nmi
+    ;call _debug_force_reset
+    xor eax, eax
+    mov al, _DEBUG_RW_INST_READ
+    xor ebx, ebx
+    xor ecx, ecx
+    ;call _debug_memory_range
+    xor eax, eax
+    xor edx, edx
+    mov ecx, _KERNEL_GS_BASE
+    call _write_msr
+    mov ecx, _IA32_MISC_ENABLE
+    call _read_msr
+    jc _kernel_entry_smp
+    or al, (_MISC_FAST_STRING_ENABLE or _MISC_ENABLE_THERMAL_MONITOR)
+    wrmsr
 
     ;sub esp, 2H
     ;fnstcw word [esp]
@@ -713,16 +781,13 @@ _kernel_entry_default:
     ;mov byte [esp], 0H
     ;stac
 
-    mov eax, _extract_primary_apic_information
-    call _parse_mp_conftable_entry
-
-    ;xor eax, eax
-    ;xor edx, edx
-    ;call _debug_memory_range
+_kernel_entry_smp:
+    ;mov eax, _extract_primary_apic_information
+    ;call _parse_mp_conftable_entry
 
     mov eax, _frame
     mov ebx, dword [_frame.next]
-    mov ecx, 400H
+    mov ecx, ((_KERNEL_IDENTITY * _PSE_PAGE_FRAME_SIZE) shr _PAGE_TABLE_SHIFT)
     xor edx, edx
     mov edi, _BITMAP_RESET
     call _bitmap_update
@@ -743,12 +808,15 @@ _kernel_entry_default:
 
     call _teletype_initialize
     jc _panic
-    call _refresh_apic_registers_set
-    jc _panic
-    or dword [_PAE_LOCAL_APIC+_SPURIOUS_INTERRUPT_VECTOR_REGISTER], _SPURIOUS_APIC_ENABLE
+    ;xor eax, eax
+    ;call _refresh_apic_registers_set
+    ;jc _panic
+    ;call _soft_enable_apic
     call _create_vdso
     jc _panic
 
+match,DEBUG
+{
     cmp dword [_io_apic_count], 0H
     jz _kernel_entry_uniprocessor
     mov eax, _configure_io_apic_rt
@@ -756,12 +824,156 @@ _kernel_entry_default:
     xor ebp, ebp
     call _parse_mp_conftable_entry
 _kernel_entry_uniprocessor:
-_abc:
-match,DEBUG
-{
+    mov eax, dword [_rsdp_descriptor_base]
+    mov ebx, dword [eax+_rsdp_descriptor.rsdt_address]
+    mov edx, _MADT
+    call _acpi_find_sdt_table
+    mov ecx, dword [ebx+_madt_header.common.length]
+    sub ecx, _madt_header.sizeof
+    lea ebx, [ebx+_madt_header.sizeof]
+_abc_loop:
+    mov dl, byte [ebx+_madt_prefix.type]
+    cmp dl, _MADT_PROCESSOR_LOCAL_APIC
+    jz _abc_preprocessor
+    cmp dl, _MADT_IO_APIC
+    jz _abc_io_apic
+_abc_preprocessor:
+    inc byte [_processor_count]
+    jmp _abc_update
+_abc_io_apic:
+    inc byte [_io_apic_count]
+    mov edx, dword [ebx+_madt_io_apic.io_apic_address]
+    mov dword [_io_apic_base], edx
+    xor eax, eax
+    mov al, _REFRESH_ONLY_IO_APIC
+    call _refresh_apic_registers_set
+    call _io_apic_reset_rt
+    call _io_apic_irq_connect
     call _8259_disable
-    mov byte [_interrupt_stub_64], _CLI
-    mov byte [_interrupt_stub_64+1H], _HLT
+    ;call _soft_disable_apic
+    ;mov dword [_LOCAL_APIC+_SPURIOUS_INTERRUPT_VECTOR_REGISTER], 0H
+    ;mov eax, dword [_LOCAL_APIC+_SPURIOUS_INTERRUPT_VECTOR_REGISTER]
+    ;mov eax, dword [_LOCAL_APIC+_LVT_LINT0]
+    ;xor eax, _LVT_LINT_MASKED
+    ;mov dword [_LOCAL_APIC+_LVT_LINT0], eax
+    ;mov eax, dword [_LOCAL_APIC+_LVT_LINT0]
+
+    mov ecx, _IA32_APIC_BASE
+    rdmsr
+    or eax, (_APIC_BASE_EN or _APIC_BASE_EXTD)
+    wrmsr
+
+    sub esp, _pci_configuration_header.sizeof
+    xor eax, eax
+    xor ebx, ebx
+    xor ecx, ecx
+    mov esi, esp
+    call _pci_read_configuration_header
+
+    call _set_cr0_am
+    mov eax, _EFLAGS_AC
+    call _set_eflags
+    mov dword [1H], 5H
+
+    mov eax, 0H
+    mov ebx, 01FH
+    mov ecx, 7H
+    xor edx, edx
+    mov edi, 0H
+    call _pci_write_configuration_space
+
+    mov ebx, _LOCAL_APIC_ACCESS_WRITE
+    mov ecx, _LVT_ERROR
+    mov eax, _APIC_ERROR_ENTRY
+    call _local_apic_access_register
+
+    mov eax, _APIC_ERROR_ENTRY
+    mov edx, (_apic_error_gate or _SWAP_IDT_ASSIGN_GATE)
+    call _set_and_swap_idt_vector
+    ;mov ecx, 
+
+    xor eax, eax
+    cpuid
+    mov eax, 0BH
+    xor ecx, ecx
+    cpuid
+
+    ;mov dword [_LOCAL_APIC+_LOGICAL_DESTINATION_REGISTER], (0DAH shl 018H)
+    ;mov eax, 1H
+    ;cpuid
+
+    ;mov dword [_LOCAL_APIC+_ERROR_STATUS_REGISTER], 1H
+    ;mov eax, dword [_LOCAL_APIC+_ERROR_STATUS_REGISTER]
+    ;mov al, byte [_singleton.x2apic]
+    mov ecx, (_LOCAL_APIC_BASE_MSR + _LOGICAL_DESTINATION_REGISTER_MSR)
+    rdmsr
+    jmp $
+
+    mov ecx, (_LOCAL_APIC_BASE_MSR + _LVT_ERROR_MSR)
+    rdmsr
+    mov edx, 5H
+    wrmsr
+    mov ecx, (_LOCAL_APIC_BASE_MSR + _INTERRUPT_COMMAND_REGISTER_MSR)
+    xor edx, edx
+    mov eax, (_ICR_SELF or _ICR_LEVEL_ASSERT or 3H)
+    wrmsr
+
+    ;mov ecx, _SELF_IPI
+    ;xor eax, eax
+    ;xor edx, edx
+    ;mov al, 0H
+    sti
+    nop
+    nop
+    mov ecx, (_LOCAL_APIC_BASE_MSR + _LVT_ERROR_MSR)
+    rdmsr
+    mov ecx, (_LOCAL_APIC_BASE_MSR + _ERROR_STATUS_REGISTER_MSR)
+    xor eax, eax
+    wrmsr
+    rdmsr
+    xor eax, eax
+    wrmsr
+    rdmsr
+    ;wrmsr
+    ;mov ecx, (_LOCAL_APIC_BASE_MSR + _ERROR_STATUS_REGISTER_MSR)
+    ;xor eax, eax
+    ;xor edx, edx
+    ;wrmsr
+    ;rdmsr
+    jmp $
+
+    mov al, byte [_singleton.acpi]
+    mov ecx, 19CH
+    rdmsr
+
+    mov dword [_IO_APIC+_INDEX_REGISTER], _IO_APIC_RT_LOW_1
+    mov eax, dword [_IO_APIC+_DATA_REGISTER]
+    mov dword [_IO_APIC+_INDEX_REGISTER], _IO_APIC_RT_LOW_2
+    mov eax, dword [_IO_APIC+_DATA_REGISTER]
+
+    ;sti
+    ;jmp $
+    jmp __next
+
+;_oo_loop:
+;    mov al, _IO_APIC_RT_HIGH_2
+;    mov byte [_PAE_IO_APIC+_INDEX_REGISTER], al
+;    mov eax, dword [_PAE_IO_APIC+_DATA_REGISTER]
+;    test eax, 1 shl 12
+;    jz _oo_loop
+;    nop
+
+_abc_update:
+    movzx eax, byte [ebx+_madt_prefix.length]
+    sub ecx, eax
+    add ebx, eax
+    test ecx, ecx
+    jnz _abc_loop
+
+__next:
+
+    mov dword [_PAE_LOCAL_APIC+_LOCAL_EOI_REGISTER], 0H
+    call _8259_disable
     mov byte [_PAE_IO_APIC+_INDEX_REGISTER], _REDIRECTION_TABLE_BASE
     mov eax, dword [_PAE_IO_APIC+_DATA_REGISTER]
     mov byte [_PAE_IO_APIC+_INDEX_REGISTER], _REDIRECTION_TABLE_BASE+1H
@@ -769,11 +981,6 @@ match,DEBUG
     sti
     jmp $
 
-    mov byte [_PAE_IO_APIC+_INDEX_REGISTER], _IO_APIC_VERSION_REGISTER
-    mov eax, dword [_PAE_IO_APIC+_DATA_REGISTER]
-    shr eax, _IO_APIC_VERSION_IRQ_RT_SHIFT
-    and eax, _IO_APIC_VERSION_IRQ_RT_MASK
-    inc eax
 
     jmp $
     
@@ -787,7 +994,7 @@ match,DEBUG
     jmp $
 
     mov eax, _next
-    mov word [_interrupt_stub_49], 0E0FFH
+    ;mov word [_interrupt_stub_49], 0E0FFH
     mov edx, dword [_PAE_LOCAL_APIC+_LOCAL_APIC_ID_REGISTER]
     shl edx, (_ICR_XAPIC_DESTINATION_SHIFT - 020H)
     mov dword [_PAE_LOCAL_APIC+_INTERRUPT_COMMAND_REGISTER_HIGH], edx
@@ -826,6 +1033,9 @@ _loop:
     mov ecx, _SYSENTER_ESP_MSR
     wrmsr
 _kernel_entry_sysenter:
+    mov byte [_singleton.apic], 0H
+    mov byte [_singleton.x2apic], 0H
+
     mov ax, 013H
     call _video_bios
     jc _teletype_initialize_exit
@@ -869,24 +1079,30 @@ _kernel_entry_next:
     ;test byte [_singleton.smap], 1H
     ;clac
     int 030H
-    hlt
-    jmp $-1H
+    jmp _kernel_error
 
 _cpuid_detection:
  ; in: esi - cpuid state object
+ ; out: cf - set if cpuid not supported
  ; preserves: ebx, ecx, edx, esi, edi, ebp
  ; note:
- ;  Avoid to execute cpuid as much as possible.
- ;  It's a serialization instruction (out-of-order are disable)
+ ;  Avoid to execute cpuid as much as possible, it's a serialization instruction (out-of-order are disable)
+ ;  To ensure that cpuid is present, I update the EFLAGS[ID] to see if it's change.
+ ;  Warning: Do not depend on the absence of an invalid opcode trap on the CPUID opcode to detect the CPUID instruction.
     push ebx ecx edx edi ebp
     mov byte [esi+_cpuid.maxphyaddr], 020H
+ irp _kind*, or,xor
+ {
     pushfd
-    or dword [esp], _EFLAGS_CPUID
+    _kind dword [esp], _EFLAGS_CPUID
     popfd
     pushfd
     pop eax
     test eax, _EFLAGS_CPUID
-    jz _cpuid_detection_exit
+    stc
+    match =or,  _kind \{ jz  _cpuid_detection_exit \}
+    match =xor, _kind \{ jnz _cpuid_detection_exit \}
+ }
     xor ecx, ecx
     mov cl, _cpuid.sizeof
     call _clear_string
@@ -987,6 +1203,9 @@ _cpuid_detection_smid:
     test ecx, _CPUID_ECX_SSE42
     jz $+5H
     inc byte [esi+_cpuid.sse42]
+    test edx, _CPUID_EDX_ACPI
+    jz $+5H
+    inc byte [esi+_cpuid.acpi]
     test ecx, _CPUID_ECX_VMX
     jz $+5H
     inc byte [esi+_cpuid.vmx]
@@ -1098,33 +1317,271 @@ use16
 _custom_smm_end:
 use32
 
-_debug_memory_range:
- ; in:
- ;  eax - address to examine (on read/write)
- ;  edx - general detect enable (edx = not 0H)
- ; XXX
-    mov dr0, eax
-    mov dr1, eax
-    mov dr2, eax
-    mov eax, dr7
-    or eax, (_DR7_GE or _DR7_LE or\
-        (_DEBUG_LEN_4B shl _DR7_LEN2) or (_DEBUG_RW_DATA_WRITE shl _DR7_RW2) or _DR7_G2 or\
-        (_DEBUG_LEN_2B shl _DR7_LEN1) or (_DEBUG_RW_DATA_WRITE shl _DR7_RW1) or _DR7_G1 or\
-        (_DEBUG_LEN_1B shl _DR7_LEN0) or (_DEBUG_RW_DATA_WRITE shl _DR7_RW0) or _DR7_G0)
-    test edx, edx
-    jz _debug_memory_range_set
-    or eax, _DR7_GD
-_debug_memory_range_set:
-    mov dr7, eax
+_pci_access_configuration:
+ ;  eax - pci bus
+ ;  ebx - pci device
+ ;  ecx - pci function
+ ;  edx - pci offset (last 2H bit must be clear)
+ ; out: cf - set if last 2H bit in edx not clear
+ ; preserves: esi, edi, ebp
+ ; note:
+ ;  x86 processor implement two address space (IO,Memory).
+ ;  PCI require an extra address space: configuration space.
+    test dl, 011B
+    stc
+    jnz _pci_access_configuration_exit
+    shl eax, _PCI_BUS_SHIFT
+    and eax, _PCI_BUS_MASK
+    shl ebx, _PCI_DEVICE_SHIFT
+    and ebx, _PCI_DEVICE_MASK
+    shl ecx, _PCI_FUNCTION_SHIFT
+    and ecx, _PCI_FUNCTION_MASK
+    or eax, ebx
+    or eax, ecx
+    lea eax, [_PCI_ENABLE+eax+edx]
+    mov edx, _PCI_ADDRESS
+    out dx, eax
+_pci_access_configuration_exit:
     ret
 
-_debug_io_range:
-    mov dr3, eax
-    mov eax, dr7
+_pci_read_configuration_space:
+ ; in:
+ ;  eax - pci bus
+ ;  ebx - pci device
+ ;  ecx - pci function
+ ;  edx - pci offset (last 2H bit must be clear)
+ ; out: cf - set if last 2H bit in edx not clear
+ ; preserves: esi, edi, ebp
+    call _pci_access_configuration
+    jc _pci_read_configuration_space_exit
+    mov edx, _PCI_DATA
+    in eax, dx
+_pci_read_configuration_space_exit:
     ret
+
+_pci_write_configuration_space:
+ ; in:
+ ;  eax - pci bus
+ ;  ebx - pci device
+ ;  ecx - pci function
+ ;  edx - pci offset (last 2H bit must be clear)
+ ;  edi - data to write
+ ; out: cf - set if last 2H bit in edx not clear
+ ; preserves: esi, edi, ebp
+    call _pci_access_configuration
+    jc _pci_write_configuration_space_exit
+    mov eax, edi
+    mov edx, _PCI_DATA
+    out dx, eax
+_pci_write_configuration_space_exit:
+    ret
+
+_pci_read_configuration_header:
+ ; in: 
+ ;  eax - pci bus
+ ;  ebx - pci device
+ ;  ecx - pci function
+ ;  esi - pci header address
+ ; preserves: esi, edi, ebp
+    push eax ebx ecx ebp
+    xor ebp, ebp
+  assert (_pci_configuration_header.sizeof)
+_pci_read_configuration_header_loop:
+    mov eax, dword [esp+00CH]
+    mov ebx, dword [esp+8H]
+    mov ecx, dword [esp+4H]
+    mov edx, ebp
+    call _pci_read_configuration_space
+    mov dword [esi+ebp], eax
+    add ebp, 4H
+    cmp ebp, (_pci_configuration_header.sizeof shl 2H)
+    jb _pci_read_configuration_header_loop
+    pop ebp ecx ebx eax
+    ret
+
+_debug_force_reset:
+ ; preserves: ebx, ecx, esi, edi, ebp
+    xor eax, eax
+    inc al
+    mov edx, (_spurious_interrupt_gate or _SWAP_IDT_ASSIGN_GATE)
+    call _set_and_swap_idt_vector
+    mov edx, (_DR7 or _DR7_LE or _DR7_GE)
+    mov dr7, edx
+    mov edx, _DR6
+    mov dr6, edx
+    xor edx, edx
+    mov dr0, edx
+    mov dr1, edx
+    mov dr2, edx
+    mov dr3, edx
+    jmp _swap_idt_vector
+
+_debug_register_allocate:
+ ; out:
+ ;  al - target debug register [0H-3H]
+ ;  cf - set if all debug register are reserved or GD is set in dr7
+ ; preserves: ebx, ecx, edx, esi, edi, ebp
+    push edx ebp
+    call _debug_general_detect
+    jc _debug_register_allocate_exit
+    xor al, al
+ rept 4H i:0H
+ {
+    test ebp, (_DR7_G#i or _DR7_L#i)
+    jz _debug_register_allocate_exit
+  if ((i) <> 3H)
+    inc al
+  end if
+ }
+    stc
+_debug_register_allocate_exit:
+    pop ebp edx
+    ret
+
+_debug_memory_range:
+ ; in:
+ ;  eax - kind of range
+ ;  ebx - address to examine
+ ;  ecx - range size (must not be greater than 4H)
+ ; out: cf - set if argument are not valid
+ ; preserves: esi, edi, ebp
+    push esi edi ebp
+    cmp eax, (4H + 1H)
+    cmc
+    jc _debug_memory_range_exit
+    cmp al, _DEBUG_RW_INST_READ
+    jnz _debug_memory_range_sanitize
+    xor ecx, ecx
+    inc cl
+_debug_memory_range_sanitize:
+    cmp ecx, (4H + 1H)
+    cmc
+    jc _debug_memory_range_exit
+    xor edx, edx
+    mov ebp, eax
+_debug_memory_range_loop:
+    jecxz _debug_memory_range_exit
+    mov eax, ebx
+    and al, (4H - 1H)
+    mov al, byte [_debug_memory_range_align+eax]
+    movzx edx, al
+    cmp al, cl
+    jbe _debug_memory_range_assign
+    mov dl, 1H
+    cmp cl, 2H
+    jb _debug_memory_range_assign ; either 2H or 3H
+    inc dl
+_debug_memory_range_assign:
+    call _debug_register_allocate
+    jc _debug_memory_range_exit
+    mov byte [_debug_memory_range_self], al
+    shl byte [_debug_memory_range_self], 3H
+    add byte [_debug_memory_range_self], (0C0H + _EBX)
+    mov dr0, ebx
+  label _debug_memory_range_self byte at ($ - 1H)
+    add ebx, edx
+    sub ecx, edx
+    dec dl
+    mov esi, dr7 ; call to _debug_register_allocate succeed so access to dr7 is safe
+    or esi, dword [_debug_memory_range_activate+eax*4H]
+    mov edi, ecx
+ irp _kind*, length,rw
+ {
+    mov ecx, dword [_debug_memory_range_#_kind+eax*4H]
+  match =rw, _kind \{ mov edx, ebp \}
+    shl edx, cl
+    or esi, edx
+ }
+    mov ecx, edi
+    mov dr7, esi
+    jmp _debug_memory_range_loop
+_debug_memory_range_exit:
+    pop ebp edi esi
+    ret
+_debug_memory_range_align:
+    db 4H
+    db 1H
+    db 2H
+    db 1H
+_debug_memory_range_activate:
+    dd (_DR7_G0 or _DR7_L0)
+    dd (_DR7_G1 or _DR7_L1)
+    dd (_DR7_G2 or _DR7_L2)
+    dd (_DR7_G3 or _DR7_L3)
+_debug_memory_range_length:
+    dd _DR7_LEN0  
+    dd _DR7_LEN1
+    dd _DR7_LEN2
+    dd _DR7_LEN3
+_debug_memory_range_rw:
+    dd _DR7_RW0
+    dd _DR7_RW1
+    dd _DR7_RW2
+    dd _DR7_RW3
+
+align 8H
+_debug_general_detect_gate DT_gte _DE_PRESENT or _DPL0 or _386_INTERRUPT_GATE,\
+        0H, _CODE_KERNEL, _debug_general_detect_trigger
+_debug_general_detect:
+ ; out:
+ ;  eax = 1H (always)
+ ;  ebp = dr7
+ ;   cf - set when GD is set in dr7
+ ; preserves: ebx, ecx, esi, edi
+    xor eax, eax
+    inc al
+    mov edx, (_debug_general_detect_gate or _SWAP_IDT_ASSIGN_GATE)
+    call _set_and_swap_idt_vector
+    mov ebp, dr7
+_debug_general_detect_exit:
+    call _swap_idt_vector
+    test ebp, _DR7_GD
+    jmp _invert_zero_carry
+_debug_general_detect_trigger:
+    mov ebp, dr7
+    or ebp, _DR7_GD
+    mov dr7, ebp
+    mov dword [esp+_IRET_EIP], _debug_general_detect_exit
+    iretd
+
+_debug_save_register:
+ ; in: ebx - target process pointer
+ ; out: cf - save not performed
+ ; preserves: ebx, ecx, esi, edi
+    cmp byte [ebx+_process.dbgctx.active], 0H
+    stc
+    jz _debug_save_register_exit
+    call _debug_general_detect
+    jc _debug_save_register_exit
+ irp _kind*, dr0,dr1,dr2,dr3,dr6,dr7
+ {
+    mov eax, _kind
+    mov dword [ebx+_process.dbgctx.#_kind], eax
+ }
+_debug_save_register_exit:
+    ret
+
+_debug_export_register:
+ ; in: ebx - target process pointer
+ ; preserves: ebx, ecx, esi, edi, ebp
+    call _debug_force_reset
+    cmp byte [ebx+_process.dbgctx.active], 0H
+    jz _debug_export_register_exit
+ irp _kind*, dr0,dr1,dr2,dr3,dr6,dr7
+ {
+    mov eax, dword [ebx+_process.dbgctx.#_kind]
+    mov _kind, eax
+ }
+_debug_export_register_exit:
+    ret
+
+include "apic.inc"
 
 _identify_io_apic:
  ; in: ebx - mp entry object pointer
+    movzx esi, byte [ebx+_io_apic_entry.io_apic_flags]
+    test esi, _IO_APIC_FLAGS_EN
+    jz _identify_io_apic_exit
     inc byte [_io_apic_count]
     cmp byte [_io_apic_count], 1H
     jnz _identify_io_apic_exit
@@ -1148,11 +1605,10 @@ _set_io_apic_irq_pin:
     mov dword [_PAE_IO_APIC+_DATA_REGISTER], edi
     dec al
     mov byte [_PAE_IO_APIC+_INDEX_REGISTER], al
-    xor eax, eax
-    mov eax, 040H ; XXX
+    lea eax, [ebp+_INTEL_RESERVED_INT]
     movzx esi, byte [ebx+_io_interrupt_entry.interrupt_type]
-   ;cmp esi, ((_set_io_apic_irq_pin_table_end - _set_io_apic_irq_pin_table) shr 2H)
-   ;jae
+    ;cmp esi, ((_set_io_apic_irq_pin_table_end - _set_io_apic_irq_pin_table) shr 2H)
+    ;jae
     or eax, dword [_set_io_apic_irq_pin_table+esi*4H]
     movzx esi, word [ebx+_io_interrupt_entry.io_interrupt_flags]
     and esi, _INTERRUPT_EL_MASK
@@ -1191,9 +1647,9 @@ _parse_mp_conftable_entry:
  ; preserves: esi, edi, ebp
  ; note: predicate in _mp_predicate must not visibly modify a register except esi,edi,ebp
     push esi edi ebp
+    cmp dword [_mp_floating_pointer_found], 1H
+    jz _parse_mp_conftable_entry_exit
     mov ebx, dword [_mp_floating_pointer_base]
-    test ebx, ebx
-    js _parse_mp_conftable_entry_exit
     mov ebx, dword [ebx+_mp_floating_pointer.physical_address]
     mov ecx, dword [ebx+_mp_configuration_table.entry_count]
     jecxz _parse_mp_conftable_entry_exit
@@ -1247,7 +1703,7 @@ _try_access_msr:
 _try_access_msr_self:
     mov word [_try_access_msr_execute], bx
     mov byte [_msr_defined], (not 0H)
-    lea ebx, [_IDT+_EXCEPTION_GENERAL_PROTECTION*8H]
+    mov ebx, (_IDT + _vector_13)
     mov esi, ebx
     mov edi, _gp_save
  rept 2H { movsd }
@@ -1327,12 +1783,18 @@ _allocate_variable_mtrr_table:
     dd _MTRR_PHYS_BASE_7, _MTRR_PHYS_MASK_7
 _allocate_variable_mtrr_table_end:
 
+_allocate_and_mark_memory_range_mtrr:
+    mov eax, _allocate_variable_mtrr
 _mark_memory_range_mtrr:
  ; in:
+ ;  eax - predicate to call to obtain new set of MSR
  ;  ebx - start physical location
  ;  ecx - size range
  ;  edx - memory type
- ; out: cf - set if error has occured
+ ; out:
+ ;  ebx - MTRR mask (if found)
+ ;  ecx - MTRR physical base (if found)
+ ;   cf - set if error has occured
  ; preserves: esi, edi, ebp
     push esi edi
     bsr ecx, ecx
@@ -1347,21 +1809,25 @@ _mark_memory_range_mtrr:
     ja _mark_memory_range_mtrr_exit
     mov esi, ebx
     or esi, edx
-    xor eax, eax
-    inc al
-    shl eax, cl
-    dec eax
-    not eax
-    lea edi, [eax+_MTRR_PHYS_MASK_V]
-    call _allocate_variable_mtrr
+    xor edx, edx
+    inc dl
+    shl edx, cl
+    dec edx
+    not edx
+    lea edi, [edx+_MTRR_PHYS_MASK_V]
+    xor edx, edx
+    call eax
     jc _mark_memory_range_mtrr_exit+1H
     mov eax, esi
     wrmsr
+    mov edx, ecx
     call _maxphyaddr_high_mask
     mov ecx, ebx
+    mov ebx, edx
     mov edx, eax
     mov eax, edi
     wrmsr
+    xchg ebx, ecx
     jmp _mark_memory_range_mtrr_exit+1H
 _mark_memory_range_mtrr_exit:
     stc
@@ -1736,8 +2202,8 @@ _store_entry:
  ;  edi - entry index 
  ; preserves: eax, ebx, ecx, edx, esi, ebp
     stosd
-    test byte [_singleton.pae], 1H
-    jz _store_entry_exit
+    ;test byte [_singleton.pae], 1H
+    ;jz _store_entry_exit
     push eax
     mov eax, edx
     stosd
@@ -1862,6 +2328,9 @@ _convert_pse_page_exit:
 
 enum & _ALLOCATION_VIRTUAL, _ALLOCATION_PSE, _ALLOCATION_HINT, _ALLOCATION_HOLE
 _min_virtual_address: dd _PAGE_FRAME_SIZE ; don't apply to _ALLOCATION_PHYSICAL only _ALLOCATION_VIRTUAL
+_map_one_page_virtual_address:
+    xor ecx, ecx
+    inc cl
 _map_virtual_address:
  ; in:
  ;  eax - kind of allocation
@@ -2052,6 +2521,9 @@ _map_virtual_address_bound_exit:
 
 enum & _DEALLOCATION_VIRTUAL, _DEALLOCATION_PSE, _DEALLOCATION_SHARING
 assert (_ALLOCATION_VIRTUAL = _DEALLOCATION_VIRTUAL)
+_unmap_one_page_virtual_address:
+    xor ecx, ecx
+    inc cl
 _unmap_virtual_address:
  ; in:
  ;  eax - kind of allocation
@@ -2383,7 +2855,7 @@ _user_vdso              _allocation_functors _allocate_user_vdso, _allocate_user
 _kernel_rw_page         _allocation_functors _allocate_kernel_rw_page, _allocate_kernel_pde, _allocate_kernel_pdpte
 _kernel_big_rw_page     _allocation_functors 0H, _allocate_kernel_big_rw_page, _allocate_kernel_pdpte
 _kernel_framebuffer     _allocation_functors 0H, _allocate_kernel_framebuffer, _allocate_kernel_pdpte
-irp _kind, local,io
+irp _kind*, local,io
 {
 _kernel_#_kind#_apic_base _allocation_functors _allocate_kernel_#_kind#_apic_base,\
     _allocate_kernel_pde, _allocate_kernel_pdpte
@@ -2764,27 +3236,39 @@ _convert_zero_carry:
     clc
     ret
 
-_set_eflags:
+irp _kind*, set,clear
+{
+_#_kind#_eflags:
  ; in: eax - new eflags
  ; preserves: ebx, ecx, edx, esi, edi, ebp
-    push edx
-    or al, _EFLAGS_RSVD
-    and eax, (_EFLAGS_CPUID or _EFLAGS_VIP or _EFLAGS_VIF or _EFLAGS_AC or _EFLAGS_VM or _EFLAGS_RF or _EFLAGS_NT or (011B shl _EFLAGS_IOPL) or\
-        _EFLAGS_OF or _EFLAGS_DF or _EFLAGS_IF or _EFLAGS_TF or _EFLAGS_SF or _EFLAGS_ZF or _EFLAGS_AF or _EFLAGS_PF or _EFLAGS_RSVD or _EFLAGS_CF)
+    push ebx
+    pushfd
+    match =set, _kind \{ or al, _EFLAGS_RSVD \}
+    and eax, (_EFLAGS_CPUID or _EFLAGS_VIP or _EFLAGS_VIF or _EFLAGS_AC or _EFLAGS_VM or _EFLAGS_RF or _EFLAGS_NT or\
+        (011B shl _EFLAGS_IOPL) or _EFLAGS_OF or _EFLAGS_DF or _EFLAGS_IF or _EFLAGS_TF or _EFLAGS_SF or _EFLAGS_ZF or\
+        _EFLAGS_AF or _EFLAGS_PF or _EFLAGS_RSVD or _EFLAGS_CF)
+    match =clear, _kind \{ not eax \}
+    mov ebx, _#_kind#_eflags_lahf
     cmp eax, 0FFH
-    ja _set_eflags_pushf
-    mov dh, al
+    jbe $+7H
+    mov ebx, _#_kind#_eflags_pushf
+    popfd
+    jmp ebx
+_#_kind#_eflags_lahf:
     lahf
-    mov ah, dh
+    match =set, _kind \{ or ah, al \}
+    match =clear, _kind \{ and ah, al \}
     sahf
-    jmp _set_eflags_exit
-_set_eflags_pushf:
+    jmp _#_kind#_eflags_exit
+_#_kind#_eflags_pushf:
     pushf
-    or dword [esp], eax
+    match =set, _kind \{ or dword [esp], eax \}
+    match =clear, _kind \{ and dword [esp], eax \}
     popf
-_set_eflags_exit:
-    pop edx
+_#_kind#_eflags_exit:
+    pop ebx
     ret
+}
 
 enum & _SET_SF_CF, _SET_SF_ENABLE, _SET_ZF_CF, _SET_ZF_ENABLE
 _set_depend_carry:
@@ -3557,7 +4041,8 @@ _copy_on_write_4096:
     call _copy_string
     call _clear_temporary_1
 _copy_on_write_signal:
-    mov eax, _EFLAGS_SF
+    xor eax, eax
+    mov al, _EFLAGS_SF
     call _set_eflags   
 _copy_on_write_exit:
     pop ebp edi esi ebx
@@ -3750,18 +4235,43 @@ _next_power_two:
 _next_power_two_exit:
     ret
 
-_refresh_apic_registers_set:
- ; out: cf - set if refresh not worth (x2APIC enable, APIC disable or not present)
+irp _kind*, io,local
+{
+_#_kind#_apic_mtrr_set:
     xor eax, eax
-    lea ecx, [eax+1H]
+    lea edx, [eax-1H]
+    cmpxchg byte [_#_kind#_apic_mtrr_alloc], dl
+    mov eax, _#_kind#_apic_mtrr_set_extract
+    mov ebx, dword [_#_kind#_apic_base]
+    mov ecx, _PAGE_FRAME_SIZE
+    mov edx, _MTRR_TYPE_UC
+    jnz _mark_memory_range_mtrr
+    call _allocate_and_mark_memory_range_mtrr
+    mov dword [_#_kind#_apic_mtrr_mask], ebx
+    mov dword [_#_kind#_apic_mtrr_phys], ecx
+    ret
+_#_kind#_apic_mtrr_set_extract:
+    mov ebx, dword [_#_kind#_apic_mtrr_mask]
+    mov ecx, dword [_#_kind#_apic_mtrr_phys]
+    ret
+}
+
+enum & _REFRESH_ONLY_IO_APIC
+_refresh_apic_registers_set:
+ ; in: eax - only refresh the io apic underlying address ?
+ ; out: cf - set if refresh not worth (x2APIC enable, APIC disable or not present)
+ ; preserves: ebx, ecx, ebp
+ ; note: [_io_apic_base] is obtainable from either the ACPI table or MP table
+    push ebx ecx
+    cmp eax, (_REFRESH_ONLY_IO_APIC + 1H)
+    cmc
+    jc _refresh_apic_registers_set_exit
+    test eax, eax
+    jnz _refresh_apic_registers_set_io
+    xor eax, eax
     mov al, _DEALLOCATION_VIRTUAL
     mov ebx, _PAE_LOCAL_APIC
-    call _unmap_virtual_address
-    jc _refresh_apic_registers_set_exit+1H
-    xor eax, eax
-    mov al, _DEALLOCATION_VIRTUAL
-    mov ebx, _PAE_IO_APIC
-    call _unmap_virtual_address
+    call _unmap_one_page_virtual_address
     jc _refresh_apic_registers_set_exit+1H
     test byte [_singleton.apic], 1H
     jz _refresh_apic_registers_set_exit
@@ -3779,46 +4289,39 @@ _refresh_apic_registers_set:
     call _convert_linear_bitmap
     call _bitmap_set_to_reset
     jc _refresh_apic_registers_set_exit+1H
-    movzx ebp, byte [_io_apic_count]
-    test ebp, ebp
-    jz _refresh_apic_registers_set_allocate
+    call _local_apic_mtrr_set
+    jc _refresh_apic_registers_set_exit+1H
+    xor eax, eax
+    mov al, (_ALLOCATION_VIRTUAL or _ALLOCATION_HINT)
+    mov ebx, _PAE_LOCAL_APIC
+    mov edx, _kernel_local_apic_base
+    call _map_one_page_virtual_address
+    jc _refresh_apic_registers_set_exit+1H
+_refresh_apic_registers_set_io:
+    cmp byte [_io_apic_count], 0H
+    jz _refresh_apic_registers_set_exit+1H
+    xor eax, eax
+    mov al, _DEALLOCATION_VIRTUAL
+    mov ebx, _PAE_IO_APIC
+    call _unmap_one_page_virtual_address
+    jc _refresh_apic_registers_set_exit+1H
+    mov eax, _frame
     mov ebx, dword [_io_apic_base]
     xor edx, edx
     call _convert_linear_bitmap
     call _bitmap_set_to_reset
     jc _refresh_apic_registers_set_exit+1H
-_refresh_apic_registers_set_allocate:
-    mov ebx, dword [_local_apic_base]
-    mov ecx, _PAGE_FRAME_SIZE
-    xor edx, edx
-    mov dl, _MTRR_TYPE_UC
-    call _mark_memory_range_mtrr
+    call _io_apic_mtrr_set
     jc _refresh_apic_registers_set_exit+1H
-    test ebp, ebp
-    jz _refresh_apic_registers_set_map
-    mov ebx, dword [_io_apic_base]
-    mov ecx, _PAGE_FRAME_SIZE
-    xor edx, edx
-    mov dl, _MTRR_TYPE_UC
-    call _mark_memory_range_mtrr
-    jc _refresh_apic_registers_set_exit+1H
-_refresh_apic_registers_set_map:
     xor eax, eax
     mov al, (_ALLOCATION_VIRTUAL or _ALLOCATION_HINT)
-    mov ebx, _PAE_LOCAL_APIC
-    xor ecx, ecx
-    inc cl
-    mov edx, _kernel_local_apic_base
-    call _map_virtual_address
-    jc _refresh_apic_registers_set_exit+1H
-    test ebp, ebp
-    jz _refresh_apic_registers_set_exit+1H
     mov ebx, _PAE_IO_APIC
     mov edx, _kernel_io_apic_base
-    call _map_virtual_address
+    call _map_one_page_virtual_address
     jmp _refresh_apic_registers_set_exit+1H
 _refresh_apic_registers_set_exit:
     stc
+    pop ecx ebx
     ret
 
 _create_vdso:
@@ -4735,7 +5238,9 @@ _create_process:
     mov ecx, _process.sizeof
     call _clear_string
     mov dword [esi+_process.socket], eax
-    mov byte [esi+_process.dna], al
+    mov byte [esi+_process.fltctx.active], al
+    mov byte [esi+_process.dbgctx.active], al
+    mov byte [esi+_process.align], al
  irp _kind*, sigmask,pending,ports
  {
     lea eax, [esi+_process.#_kind]
@@ -4752,6 +5257,7 @@ _create_process:
  }
     mov dword [esi+_process.uid], _ROOT_UID
     mov dword [esi+_process.stackpf], _PROCESS_STACKPF
+    mov byte [esi+_process.intprec], _TPR_LOWEST
     mov eax, dword [esi+_process.pending]
     call _reclaim_pid
     jc _create_process_exit
@@ -4817,9 +5323,13 @@ _switch_process:
     push esi ebp
     push _switch_process_end
     mov esi, dword [_current]
-    cmp byte [esi+_process.dna], 0H
+    ;mov ebx, esi
+    ;call _debug_save_register
+    ;mov ebx, edi
+    ;call _debug_export_register
+    cmp byte [esi+_process.fltctx.active], 0H
     jz _switch_process_stack
-    mov eax, dword [esi+_process.restore]
+    mov eax, dword [esi+_process.fltctx.save]
     fxsave [eax]
 _switch_process_stack:
     mov eax, dword [edi+_process.kstack]
@@ -4831,22 +5341,65 @@ _switch_process_stack:
 _switch_process_save:
     mov dword [_tss_vm86.esp0], eax
     mov dword [_current], edi
+    test byte [_singleton.apic], 1H
+    jz _switch_process_change
+    movzx eax, byte [edi+_process.intprec]
+    mov dword [_PAE_LOCAL_APIC+_TASK_PRIORITY_REGISTER], eax
+_switch_process_change:
     mov dword [esi+_process.context], esp
     mov esp, dword [edi+_process.context]
-    call _cr0_set_ts
+    mov ebx, edi
+    call _express_alignement_mask
+    call _set_cr0_ts
     jmp _switch_mapping_kernel
 _switch_process_end:
     pop ebp esi
     ret
 
-_cr0_set_ts:
+_set_cr0_ts:
  ; note: set CR0.TS to prevent usage of x87 of another process
+    mov edx, _CR0_TS
+    jmp _set_cr0
+
+_express_alignement_mask:
+ ; in: ebx - process struct pointer
+ ; preserves: ebx, ecx, esi, edi, ebp
+    push ebx
+    mov eax, _clear_cr0_am
+    cmp byte [ebx+_process.align], 0H
+    jz _express_alignement_mask_invoke
+    mov eax, _set_cr0_am
+_express_alignement_mask_invoke:
+    call eax
+    pop ebx
+    ret
+
+_set_cr0_am:
+ ; note: set CR0.AM for check unaligned access in user space (as well VM86)
+    mov edx, _CR0_AM
+    jmp _set_cr0
+
+_clear_cr0_am:
+    mov edx, _CR0_AM
+    jmp _clear_cr0
+
+irp _kind*, set,clear
+{
+_#_kind#_cr0:
+ ; preserves: eax, ecx, edx, esi, edi, ebp
     call _pdpt_reserved_current
     mov eax, cr0
-    or al, _CR0_TS
+    match =set, _kind \{ or eax, edx \}
+    match =clear, _kind
+ \{
+    not edx
+    and eax, edx
+    not edx
+ \}
     mov cr0, eax
     call _pdpt_read_write_current
     ret
+}
 
 _save_floating_unit:
  ; in: eax - memory area to save information (x87 legacy FPU, SSE, AVX)
@@ -5002,6 +5555,7 @@ _nothing:
  ; note: function pointer that do nothing
     ret
 
+_debug_intercept DT_gte _DE_PRESENT or _DPL0 or _386_INTERRUPT_GATE, 0H, _CODE_KERNEL, _panic_int1
 _panic_color string\
     _ESCAPE, _ESCAPE_CHANGE_BACKGROUND, "04",\
     _ESCAPE, _ESCAPE_CHANGE_FOREGROUND, "0F"
@@ -5130,8 +5684,11 @@ _panic:
     mov edx, cr4
     mov edi, _panic_cr4
     call _itoa_hexadecimal
-    mov word [_IDT+8H+0H], (_panic_int1 and 0FFFFH)
-    mov word [_IDT+8H+6H], ((_panic_int1 shr 010H) and 0FFFFH)
+    mov esi, _debug_intercept
+    mov edi, (_IDT + _vector_1)
+ rept 2H { movsd }
+    ;mov word [_IDT+8H+0H], (_panic_int1 and 0FFFFH)
+    ;mov word [_IDT+8H+6H], ((_panic_int1 shr 010H) and 0FFFFH)
     xor eax, eax
     mov edx, dr7
     or edx, eax
@@ -5211,7 +5768,7 @@ enum    _SYSCALL_EXIT, _SYSCALL_FORK, _SYSCALL_READ, _SYSCALL_WRITE, _SYSCALL_WA
         _SYSCALL_SIGNAL, _SYSCALL_SIGRET, _SYSCALL_SIGMASK, _SYSCALL_KILL, _SYSCALL_RENICE, _SYSCALL_REBOOT, _SYSCALL_DAEMON, _SYSCALL_GPGID,\
         _SYSCALL_SPGID, _SYSCALL_GPGRP, _SYSCALL_SPGRP, _SYSCALL_GSID, _SYSCALL_SSID, _SYSCALL_ARGCPY, _SYSCALL_MACCESS, _SYSCALL_OPEN,\
         _SYSCALL_BIND, _SYSCALL_UNBIND, _SYSCALL_LISTEN, _SYSCALL_ALIVE, _SYSCALL_SEND, _SYSCALL_RECEIVE, _SYSCALL_FSHSCK,\
-        _SYSCALL_CLOSE, _SYSCALL_CLSALL, _SYSCALL_MD5, _SYSCALL_SHA1, _SYSCALL_AESENC_ECB, _SYSCALL_TEST
+        _SYSCALL_CLOSE, _SYSCALL_CLSALL, _SYSCALL_MD5, _SYSCALL_SHA1, _SYSCALL_AESENC_ECB, _SYSCALL_ALIGN, _SYSCALL_TEST
 
 _syscall_dispatcher:
  ; in:
@@ -5279,6 +5836,7 @@ _syscall_dispatcher_table:
 
     dd _syscall_aesenc_ecb
     ;dd _syscall_aesdec
+    dd _syscall_align
     dd _syscall_test
 _syscall_dispatcher_table_end:
 
@@ -6284,7 +6842,7 @@ _syscall_write:
 _syscall_write_perform:
     mov esi, ecx
     mov ebp, dword [_current]
-    cmp byte [ebp+_process.extsig], 0H
+    cmp byte [ebp+_process.extsig], 0H ; if the process must exit because of a non handled signal
     mov ebp, edx
     jnz _syscall_write_bypass
     xchg ecx, edx
@@ -6764,6 +7322,7 @@ _syscall_md5:
  ;  ebx - plain text
  ;  ecx - plain text size
  ;  edx - chipher buffer
+ ; note: assume edx buffer is _MD5_DIGEST size
     push ebx edx
     sub esp, _md5_context.sizeof
     mov dword [esp+_md5_context.acc0], 067452301H
@@ -7045,7 +7604,7 @@ _aes_ShiftRows:
     mov byte [eax+_index], dl
  }
     mov bl, byte [eax+00FH]
- irp _index, 00EH,00DH,00CH
+ irp _index*, 00EH,00DH,00CH
  {
     mov dl, byte [eax+_index]
     mov byte [eax+_index+1H], dl
@@ -7713,6 +8272,20 @@ _syscall_wait:
     movsx ebx, bl
     jmp _syscall_waitpid
 
+_syscall_align:
+ ; note: it's kind of a debug syscall. Once set the current program can't revert back.
+    mov ebx, dword [_current]
+    mov eax, (not EFAULT)
+    cmp dword [ebx+_process.pid], _INIT_PID
+    jz _syscall_align_exit+2H
+    cmp byte [ebx+_process.align], 0H
+    jnz _syscall_align_exit
+    not byte [ebx+_process.align]
+    call _set_cr0_am
+_syscall_align_exit:
+    xor eax, eax
+    ret
+
 _syscall_test:
     ;movzx eax, byte [_tty1.fground]
     ;mov eax, dword [_tty1.grpdesc]
@@ -8124,10 +8697,12 @@ _syscall_sigret_found:
     mov ebp, dword [ebp+_signal_context.sigframe]
     mov esi, ebp
     mov edi, dword [ebx+_process.retframe]
-    mov ecx, _x86_register.sizeof
+    xor ecx, ecx
+    mov cl, _x86_register.sizeof
     call _copy_string
     mov edi, ebp
-    mov ecx, _x86_register.sizeof
+    xor ecx, ecx
+    mov cl, _x86_register.sizeof
     call _clear_string
 _syscall_sigret_exit:
     ret
@@ -8508,12 +9083,13 @@ _syscall_exec:
     mov ebx, dword [_current]
     mov esi, [ebx+_process.retframe]
     mov edi, esi
-    mov ecx, _x86_register.trap
+    xor ecx, ecx
+    mov cl, _x86_register.trap
     call _clear_string ; avoid leak
     mov dword [ebx+_process.ustck], _USER_STACK_VIRTUAL
     mov dword [esi+_x86_register.eip], _USER_CODE_VIRTUAL
     mov word [esi+_x86_register.cs], _CODE_USER
-    mov dword [esi+_x86_register.eflags], (_EFLAGS_IF or _EFLAGS_RSVD)
+    mov dword [esi+_x86_register.eflags], (_EFLAGS_AC or _EFLAGS_IF or _EFLAGS_RSVD)
     mov dword [esi+_x86_register.esp], _USER_SHELL_ARGUMENT_VIRTUAL
     mov word [esi+_x86_register.ss], _DATA_USER
     mov word [esi+_x86_register.ds], _DATA_USER
@@ -8628,6 +9204,15 @@ _pit_irq:
     jmp _reschedule
 
 include "kbd.inc"
+
+_enable_a20:
+ ; note: in other word, disable A20M
+    mov al, _SYSTEM_ENABLE_A20
+    out _SYSTEM_PORT, al
+    ret
+
+_disable_a20:
+    ret
 
 _keyboard_irq:
     call _keyboard_driver
@@ -8877,7 +9462,9 @@ _reboot_system:
     jz _reboot_system_legacy
     ; XXX send INIT IPI
 _reboot_system_legacy:
-    call _idt_reset
+    mov al, _SYSTEM_FAST_RESET
+    out _SYSTEM_PORT, al
+    call _idt_reset ; if it's don't work
     ud2
 
 _power_off:
@@ -8887,7 +9474,7 @@ _power_off:
     call _system_bios
     jmp _panic
 
-rept 0FFH i:0H
+rept _IDT_ENTRY i:0H
 {
 _interrupt_stub_#i:
  if ((i <> 8H) & (i <> 00AH) & (i <> 00BH) & (i <> 00CH) & (i <> _EXCEPTION_GENERAL_PROTECTION) & (i <> _EXCEPTION_PAGE_FAULT) & (i <> 011H))
@@ -8897,15 +9484,27 @@ _interrupt_stub_#i:
     jmp _interrupt_handler
 }
 
-;_spurious_interrupt:
-;    iret
+align 8H
+_spurious_interrupt_gate DT_gte _DE_PRESENT or _DPL0 or _386_INTERRUPT_GATE, 0H, _CODE_KERNEL, _spurious_interrupt
+_spurious_interrupt:
+    iret
 
 include "vm86.inc"
 
 _debug:
     mov ebx, dword [_current]
     mov ebx, dword [ebx+_process.retframe]
+    mov edx, dr6
+    test edx, (_DR6_BD or _DR6_BS or _DR6_BT) ; General detect, eflags[TF], task switch
+    jnz _debug_adjust
     or dword [ebx+_x86_register.eflags], _EFLAGS_RF
+_debug_adjust:
+    test edx, _DR6_BD
+    jz _debug_reset
+    ;XXX
+_debug_reset:
+    mov eax, _DR6
+    mov dr6, eax
 _debug_int3:
     ret
 
@@ -8927,7 +9526,20 @@ _undefined_opcode:
     mov eax, SIGILL
     jmp _send_signal_current
 
-irp _kind*, _segment,_stack_segment,_alignement_check
+_alignement_check_message string "#BAA: " ; bad alignement access
+_alignement_check:
+; XXX
+    mov ebx, dword [_current]
+    mov byte [ebx+_process.extsig], SIGBUS
+    mov ebx, _TELETYPE_CURRENT
+    mov ecx, _alignement_check_message
+    mov edx, _alignement_check_message.sizeof
+    call _syscall_write
+    ;mov ebx, dword [_current]
+    ;jmp _default_action_core_already
+    jmp $
+
+irp _kind*, _segment,_stack_segment
 {
 _kind:
     mov eax, SIGBUS
@@ -8936,23 +9548,23 @@ _kind:
 
 _device_not_available:
     mov esi, dword [_current]
-    mov al, byte [esi+_process.dna]
+    mov al, byte [esi+_process.fltctx.active]
     test al, al
     jnz _device_not_available_retreive
     not al
-    mov byte [esi+_process.dna], al
+    mov byte [esi+_process.fltctx.active], al
     mov eax, _FXSAVE_TOTAL
     call _kmalloc
     ;jc _device_not_available_finish
     ;jc _panic XXX
-    mov dword [esi+_process.restore], eax
+    mov dword [esi+_process.fltctx.save], eax
     mov edi, eax
     mov esi, _fpu_init
     mov ecx, _FXSAVE_TOTAL
     call _copy_string
     jmp _device_not_available_clear
 _device_not_available_retreive:
-    mov eax, dword [esi+_process.restore]
+    mov eax, dword [esi+_process.fltctx.save]
 _device_not_available_clear:
     clts
     fxrstor [eax]
@@ -9011,17 +9623,27 @@ _interrupt_handler_switch:
     cmp dword [esp+_x86_register.trap], _SYSCALL_ENTRY
     jz _interrupt_handler_syscall
     mov edx, dword [esp+_x86_register.trap]
-    cmp edx, ((_interrupt_handler_table_end - _interrupt_handler_table) shr 2H)
+    cmp edx, _interrupt_handler_table.size
     jae _interrupt_handler_exit
-    mov al, _8259_EOI
+    mov dword [_interrupt_handler_eoi], (_nothing - _interrupt_handler_after)
     cmp edx, _INTEL_RESERVED_INT
     jb _interrupt_handler_invoke
-    out _IBM_PIC_MASTER_COMMAND, al
+    ;test byte [_singleton.apic], 1H
+    ;jz _interrupt_handler_legacy
+    ;mov dword [_interrupt_handler_eoi], (_local_apic_eoi - _interrupt_handler_after)
+    ;jmp _interrupt_handler_invoke   
+_interrupt_handler_legacy:
+    mov eax, _8259_eoi_master
     cmp edx, (_INTEL_RESERVED_INT + _IBM_PIC_IRQ_LINE)
-    jb _interrupt_handler_invoke
-    out _IBM_PIC_SLAVE_COMMAND, al
+    jb _interrupt_handler_8259_eoi
+    mov eax, _8259_eoi_master_slave
+_interrupt_handler_8259_eoi:
+    call eax
 _interrupt_handler_invoke:
     call dword [_interrupt_handler_table+edx*4H]
+    call 0H
+ label _interrupt_handler_eoi dword at ($ - 4H)
+_interrupt_handler_after:
     jmp _interrupt_handler_signal
 _interrupt_handler_syscall:
     call _syscall_dispatcher
@@ -9042,52 +9664,69 @@ _interrupt_handler_exit:
     pop ds es fs gs
     add esp, 8H
     iretd
-_interrupt_handler_table:
-    dd _divide_error
-    dd _debug
-    dd _nmi
-    dd _debug_int3
-    dd _overflow
-    dd _bound
-    dd _undefined_opcode
-    dd _device_not_available
-    dd _double_fault
-    dd _coprocessor_error
-    dd _invalid_tss
-    dd _segment
-    dd _stack_segment
-    dd _general_protection
-    dd _page_fault
-    dd _intel_rsvd
-    dd _fpu_error
-    dd _alignement_check
-    dd _machine_check
-    dd _simd_error
-    dd _virtualization_error
-    dd _control_protection
- rept ((01CH - 016H) + 1H) { dd _intel_rsvd }
-    dd _vmm_error
-    dd _security_error
-    dd _intel_rsvd
-    assert ((($ - _interrupt_handler_table) shr 2H) = _INTEL_RESERVED_INT)
-    dd _pit_irq
-    dd _keyboard_irq
-    dd _ign_irq
-    dd _com2_irq
-    dd _com1_irq
-    dd _lpt2_irq
-    dd _floppy_irq
-    dd _lpt1_irq
-    dd _rtc_irq
-    dd _vga_retrace_irq
-    dd _ign_irq
-    dd _ign_irq
-    dd _mouse_irq
-    dd _fpu_irq
-    dd _hdd_irq
-    dd _ign_irq
-    assert ((($ - _interrupt_handler_table) shr 2H) = _SYSCALL_ENTRY)
-_interrupt_handler_table_end:
+
+_interrupt_service_table _interrupt_handler_table
+    _ist _divide_error
+    _ist _debug
+    _ist _nmi
+    _ist _debug_int3
+    _ist _overflow
+    _ist _bound
+    _ist _undefined_opcode
+    _ist _device_not_available
+    _ist _double_fault
+    _ist _coprocessor_error
+    _ist _invalid_tss
+    _ist _segment
+    _ist _stack_segment
+    _ist _general_protection
+    _ist _page_fault
+    _ist _intel_rsvd
+    _ist _fpu_error
+    _ist _alignement_check
+    _ist _machine_check
+    _ist _simd_error
+    _ist _virtualization_error
+    _ist _control_protection
+ rept ((01CH - 016H) + 1H) { _ist _intel_rsvd, ignore }
+    _ist _vmm_error
+    _ist _security_error
+    _ist _intel_rsvd
+  assert ((($ - _interrupt_handler_table) shr 2H) = _INTEL_RESERVED_INT)
+    _ist _pit_irq
+    _ist _keyboard_irq
+    _ist _ign_irq, ignore
+    _ist _com2_irq
+    _ist _com1_irq
+    _ist _lpt2_irq
+    _ist _floppy_irq
+    _ist _lpt1_irq
+    _ist _rtc_irq
+    _ist _vga_retrace_irq
+    _ist _ign_irq, ignore
+    _ist _ign_irq, ignore
+    _ist _mouse_irq
+    _ist _fpu_irq
+    _ist _hdd_irq
+    _ist _ign_irq, ignore
+  assert ((($ - _interrupt_handler_table) shr 2H) = _SYSCALL_ENTRY)
+end _interrupt_service_table
+
+use64
+
+_swapgs_needed:
+ ; note:
+ ;  Test the RPL (in this context CPL) in ss or cs to see if the cpu was interrupted in RING 0H.
+ ;  RPL 1H, 2H are not checked because they are not used.
+   ;mov ax, ss
+    mov ax, cs
+    test ax, 011B
+    jz _swapgs_needed_exit
+    swapgs
+_swapgs_needed_exit:
+    ret
+
+use32
 
 _addressing_real_current:
     mov ebx, dword [_current]
@@ -9124,6 +9763,7 @@ _addressing_real_dump:
     mov dword [ebx+_process.hgreal], edx
     mov eax, esi
     or eax, (_PE_READ_WRITE or _PE_PRESENT)
+    xor edx, edx
     test byte [_singleton.pae], 1H
     jnz _addressing_real_dump_pae
     or al, _VIRTUAL_REAL_PROTECTION
@@ -9187,9 +9827,10 @@ _addressing_real_invlpg_pae:
 _addressing_real_invlpg_exit:
     ret
 
-_DATUM_UNREAL = 08000H
-_START_UNREAL = 07C00H
-_STACK_UNREAL = 06F00H
+_DATUM_UNREAL       = 08000H
+_START_UNREAL       = 07C00H
+_STACK_UNREAL       = 06F00H
+_REAL_WRAPAROUND    = (1H shl 8H)
 _execute_real:
  ; in:
  ;  [esp+4H] - target int to call
@@ -9198,14 +9839,15 @@ _execute_real:
  ;  result are in GPR (Segment selector are discarded)
  ;  cf - set if no enough memory (in this case not real mode int is executed)
  ; note:
- ;  all register on entry are passed as-in to the real mode int
- ;  to see the eflags images on return from real mode int, consult _process.vmflgs
+ ;  all register on entry are passed as-in to the real mode int.
+ ;  to see the eflags images on return from real mode int, consult _process.vmflgs.
     push eax ebx ecx edx
+    call _clear_cr0_am
+    ;test byte [esp+014H], _REAL_WRAPAROUND
     mov ebx, dword [_current]
     call _addressing_real
-_execute_real_transition:
     test byte [ebx+_process.vm86], 1H
-    jnz _execute_real_prepare
+    jnz _execute_real_transition
     mov eax, _PAGE_FRAME_SIZE
     call _vmalloc
     jc _execute_real_exit
@@ -9216,7 +9858,7 @@ _execute_real_transition:
     mov dword [_tss_vm86.esp0], eax
     sub eax, _vm86_x86_register.sizeof
     mov dword [ebx+_process.vmframe], eax
-_execute_real_prepare:
+_execute_real_transition:
     mov bx, _TSS_VM86
     call _switch_tss
     mov al, byte [esp+014H]
@@ -9240,17 +9882,20 @@ _execute_real_prepare:
     push _START_UNREAL
     iretd
 _execute_real_terminate:
+    call _enable_a20
     mov ebx, dword [_current]
+    call _express_alignement_mask
     mov esi, dword [ebx+_process.context]
     mov esp, dword [ebx+_process.vmframe]
     mov edx, dword [esp+_vm86_x86_register.register.eflags]
     mov dword [ebx+_process.vmflgs], edx
     mov edi, esi
-    mov eax, dword [esp+_vm86_x86_register.register.ebx]
+ irp _kind*, ebx,eax
+ {
+    mov eax, dword [esp+_vm86_x86_register.register.#_kind]
     stosd
-    mov eax, dword [esp+_vm86_x86_register.register.eax]
-    stosd
-    mov dword [esp+_vm86_x86_register.register+_PUSHA_TOTAL], esi
+ }
+    mov dword [esp+_vm86_x86_register.register+_PUSHA_TOTAL], esi ; point to the next byte after popa
     call _addressing_real_revert
     popa
     pop esp
@@ -9265,9 +9910,9 @@ _execute_real_exit:
 _DESCRIPTOR_ACCESS = 5H
 _switch_tss:
  ; in: bx - new TSS selector
- ; out: cf - always clear
+ ; preserves: ebx, ecx, edx, esi, edi, ebp
     str eax
-    xor byte [_GDT+eax+_DESCRIPTOR_ACCESS], _TSS_BUSY
+    xor byte [eax+_GDT+_DESCRIPTOR_ACCESS], _TSS_BUSY
     ltr bx
     ret
 
@@ -9336,8 +9981,75 @@ _8259_disable:
     out _IBM_PIC_SLAVE_DATA, al
     ret
 
-descriptor_table _GDT
-    _null_segment DT_null
+_8259_eoi_master:
+    mov al, _8259_EOI
+    out _IBM_PIC_MASTER_COMMAND, al
+    ret
+
+_8259_eoi_master_slave:
+    call _8259_eoi_master
+    out _IBM_PIC_SLAVE_COMMAND, al
+    ret
+
+_local_apic_eoi:
+    mov dword [_PAE_LOCAL_APIC+_LOCAL_EOI_REGISTER], 0H
+    ret
+
+enum & _SWAP_IDT_ASSIGN_GATE
+_swap_idt_vector_backup: $DT_null
+_set_and_swap_idt_vector:
+    call _swap_idt_vector
+    xor edx, edx
+_swap_idt_vector:
+ ; in:
+ ;  eax - vector to swap or assign
+ ;  edx - gate aligned to 8H-byte boundaries + flags
+ ; out: cf - set if eax does not contain a valid vector
+ ; preserves: eax, ebx, ecx, edx, esi, edi, ebp
+    push esi edi
+    cmp eax, _IDT_ENTRY
+    cmc
+    jc _swap_idt_vector_exit
+    shl eax, (bsr DT_gte.sizeof)
+    test dl, _SWAP_IDT_ASSIGN_GATE
+    lea esi, [edx-_SWAP_IDT_ASSIGN_GATE]
+    jnz _swap_idt_vector_assign
+    lea esi, [_IDT+eax]
+    mov edi, _swap_idt_vector_backup
+ rept 2H { movsd }
+    lea esi, [_swap_idt+eax]
+    lea edi, [_IDT+eax]
+ rept 2H { movsd }
+    mov esi, _swap_idt_vector_backup
+_swap_idt_vector_assign:
+    lea edi, [_swap_idt+eax]
+ rept 2H { movsd }
+    shr eax, (bsr DT_gte.sizeof)
+_swap_idt_vector_exit:
+    pop edi esi
+    ret
+
+align 8H
+_apic_error_gate DT_gte _DE_PRESENT or _DPL0 or _386_INTERRUPT_GATE, 0H, _CODE_KERNEL, _apic_error_handler
+_apic_error_handler:
+    xor eax, eax
+    lea ebx, [eax+_LOCAL_APIC_ACCESS_WRITE]
+    mov ecx, _ERROR_STATUS_REGISTER
+    call _local_apic_access_register
+    mov bl, _LOCAL_APIC_ACCESS_READ
+    call _local_apic_access_register
+    mov esi, eax
+    xor eax, eax
+    mov bl, _LOCAL_APIC_ACCESS_WRITE
+    call _local_apic_access_register
+    call _local_apic_access_register ; back-to-back write
+    test esi, _ESR_SEND_ILLEGAL_VECTOR
+    ;XXX
+_apic_error_handler_exit:
+    ret
+
+_descriptor_table _GDT
+    $DT_null
     _kernel_code_segment DT_dte _DE_D or _DE_G, _DE_PRESENT or _DPL0 or _DE_EXECUTABLE or _DE_READABLE, 0H, 00FFFFFH
     _kernel_data_segment DT_dte _DE_B or _DE_G, _DE_PRESENT or _DPL0 or _DE_WRITABLE, 0H, 00FFFFFH
     _user_code_segment DT_dte _DE_D or _DE_G, _DE_PRESENT or _DPL3 or _DE_EXECUTABLE or _DE_READABLE, 0H, 00FFFFFH
@@ -9345,41 +10057,77 @@ descriptor_table _GDT
     _tss_segment DT_ste _DE_PRESENT or _DPL0 or _386_TSS, _tss, ((_tss_end - _tss) - 1H)
     _call_gate DT_gte _DE_PRESENT or _DPL3 or _386_CALL_GATE, 0H, _CODE_KERNEL, _call_gate_entry
     _tss_vm86_segment DT_ste _DE_PRESENT or _DPL0 or _386_TSS, _tss_vm86, ((_tss_vm86_end - _tss_vm86) - 1H)
-end descriptor_table
+end _descriptor_table
 
-_SYSCALL_ENTRY = 030H
-descriptor_table _IDT
-    rept 0FFH i:0H
-    {
-        _cdpl = _DPL0
-        _gate = _386_INTERRUPT_GATE
-        if (i = _SYSCALL_ENTRY)
-            _cdpl = _DPL3
-            ;_gate = _386_TRAP_GATE
-        end if
-        _#i DT_gte _DE_PRESENT or _cdpl or _gate, 0H, _CODE_KERNEL, _interrupt_stub_#i
-    }
-end descriptor_table
+_descriptor_table _GDT_64
+    $DT_null
+    _kernel_code_64_segment DT_dte _DE_L, _DE_PRESENT or _DPL0 or _DE_EXECUTABLE, 0H, 0H
+    _user_code_64_segment DT_dte _DE_L, _DE_PRESENT or _DPL3 or _DE_EXECUTABLE, 0H, 0H
+    _user_code_compatibility DT_dte _DE_D or _DE_G, _DE_PRESENT or _DPL3 or _DE_EXECUTABLE or _DE_READABLE, 0H, 00FFFFFH
+    _user_data_compatibility DT_dte _DE_B or _DE_G, _DE_PRESENT or _DPL3 or _DE_WRITABLE, 0H, 00FFFFFH
+    _tss_64_segment Long_DT_ste _DE_PRESENT or _DPL0 or _386_TSS, _tss_64, ((_tss_64_end - _tss_64) - 1H)
+end _descriptor_table
 
-_tss TSS_32 0H, _kernel_stack, _DATA_KERNEL, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
+_SYSCALL_ENTRY          = 030H
+_APIC_LINT0_ENTRY       = 031H
+_APIC_LINT1_ENTRY       = 032H
+_APIC_ERROR_ENTRY       = 033H
+_APIC_SPURIOUS_ENTRY    = 034H
+
+_descriptor_table _IDT
+  rept _IDT_ENTRY i:0H
+  {
+      _cdpl = _DPL0
+      _gate = _386_INTERRUPT_GATE
+      if (i = _SYSCALL_ENTRY)
+          _cdpl = _DPL3
+          ;_gate = _386_TRAP_GATE
+      end if
+      _vector_#i DT_gte _DE_PRESENT or _cdpl or _gate, 0H, _CODE_KERNEL, _interrupt_stub_#i
+  }
+end _descriptor_table
+
+_descriptor_table _swap_idt
+    rept _IDT_ENTRY i:0H { _swap_vector_#i: db DT_gte.sizeof dup 0H }
+end _descriptor_table
+
+;_descriptor_table _IDT_64
+;end _descriptor_table
+
+_tss _TSS_32 0H, _kernel_stack, _DATA_KERNEL, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
         0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, (_tss_bitmap - _tss)
+_tss_os_specific:
 _tss_interrupt:
 _tss_bitmap:
-_tss_extra:
 _tss_end:
 
-_tss_vm86 TSS_32 0H, _kernel_stack, _DATA_KERNEL, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
+_tss_vm86 _TSS_32 0H, _kernel_stack, _DATA_KERNEL, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H,\
     0H, 0H, 0H, 0H, 0H, 0H, 0H, 0H, (_tss_vm86_bitmap - _tss_vm86)
-_tss_vm86_interrupt:
-    rept 020H { db 0H }
-_tss_vm86_bitmap:
-    rept 02000H { db 0H }
-_tss_vm86_extra:
+_tss_vm86_os_specific:
+_tss_vm86_interrupt: ; interrupt redirection 
+    db 020H dup 0H
+_tss_vm86_bitmap: ; io permission bitmap
+    db 02000H dup 0H
     db 0FFH
 _tss_vm86_end:
 
-rept 040H { dd 0H }
+_tss_64 _TSS_64 _kernel_stack, 0H, 0H, _kernel_ist1, _kernel_ist2, _kernel_ist3, _kernel_ist4,\
+    _kernel_ist5, _kernel_ist6, _kernel_ist7, (_tss_64_bitmap - _tss_64)
+_tss_64_os_specific:
+_tss_64_bitmap:
+_tss_64_end:
+
+_DEFAULT_KERNEL_STACK = 040H ; cache line size on most platform
+align (_DEFAULT_KERNEL_STACK)
+db 0H dup _DEFAULT_KERNEL_STACK
 _kernel_stack:
+
+define _IST_TOTAL 7H
+rept _IST_TOTAL i:1H
+{
+    db 0H dup _DEFAULT_KERNEL_STACK
+    _kernel_ist#i:
+}
 
 align _FXSAVE_TOTAL
 _fpu_init: db _FXSAVE_TOTAL dup 0H
@@ -9427,7 +10175,9 @@ include "init.inc"
 include "bomb.inc"
 include "vdso.inc"
 
+_abc:
+
 _extract _init, _vdso
 
-_debugs _abc, _def, _interrupt_stub_49
+_debugs _abc, _def, _interrupt_handler
 

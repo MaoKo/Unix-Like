@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_init::
+_user_code _init
 match,DEBUG
 {
     xor eax, eax
@@ -30,7 +29,6 @@ _aes_key:
     db 015H, 0D2H, 015H, 04FH
     db 016H, 0A6H, 088H, 03CH
 }
-
     xor eax, eax
     mov al, _SYSCALL_FORK
     int 030H
@@ -79,6 +77,5 @@ _init_parent:
     int 030H
     jmp _init_parent
 _extract _login
-_init.sizeof = ($ - $$)
-end virtual
+end _user_code
 

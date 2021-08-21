@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_usertest::
+_user_code _usertest
     xor eax, eax
     mov al, _SYSCALL_WRITE
     mov ebx, _TELETYPE_CURRENT
@@ -12,5 +11,4 @@ _usertest::
     xor ebx, ebx
     int 030H
 _usertest_example string "Hello, World!!", 00AH
-_usertest.sizeof = ($ - $$)
-end virtual
+end _user_code

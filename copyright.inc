@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_copyright::
+_user_code _copyright
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -30,5 +29,4 @@ _copyright_display string\
     "Copyright achiu-au@42", 00AH,\
     "License MIT, this kernel is for educational purpose only", 00AH
 _copyright_invalid string "copyright invalid usage", 00AH
-_copyright.sizeof = ($ - $$)
-end virtual
+end _user_code

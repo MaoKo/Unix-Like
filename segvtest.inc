@@ -1,6 +1,4 @@
 
-virtual at _USER_CODE_VIRTUAL
-_segvtest::
+_user_code _segvtest
     mov dword [0H], 0DEADC0DEH
-_segvtest.sizeof = ($ - $$)
-end virtual
+end _user_code

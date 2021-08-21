@@ -40,8 +40,8 @@ _md5_hash:
     ;mov ebx, (_USER_SHELL_ARGUMENT_VIRTUAL + 4H)
     ;mov ecx, ebp
 
-    mov ebx, _abcx
-    mov ecx, 0
+    ;mov ebx, _abcx
+    ;mov ecx, 0
 
     lea edx, [esp-_MD5_DIGEST]
     int 030H
@@ -66,7 +66,7 @@ _md5_exit:
 
 ;_md5_example string "The quick brown fox jumps over the lazy dog"
 
-_abcx string ""
+;_abcx string ""
 
 _md5_head string "md5("""
 _md5_tail string """) = "

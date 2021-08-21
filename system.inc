@@ -1,4 +1,5 @@
 
+_strinit = 0H
 macro struct __name*, __argument&
 {
     local _multi, _name, _argument, _proxy
@@ -15,29 +16,40 @@ macro struct __name*, __argument&
     match =false, _multi \{ define _argument \}
     macro __struct
     \{
-        local _arglist
+        \local _arglist
         define _arglist
         match _empty, _argument \\{ irp _, _empty \\\{ _arglist equ _arglist 0H, \\\} \\}
         match,_argument \\{ define _arglist , \\}
-        virtual at 0H
-            match _struc_name, _name
-            \\{
+        match _struc_name, _name
+        \\{
+            virtual at 0H
+                _strinit = (not 0H)
                 match _=,, _arglist \\\{ _struc_name _struc_name _ \\\}
                 match  =,, _arglist \\\{ _struc_name _struc_name   \\\}
+                _strinit = 0H
                 _struc_name\\#.sizeof = $
                 _struc_name\\#.powertwo = $
                 if ((_struc_name\\#.powertwo) & ((bsf _struc_name\\#.powertwo) <> (bsr _struc_name\\#.powertwo)))
                     _struc_name\\#.powertwo = (2H shl (bsr _struc_name\\#.powertwo))
                 end if
-            \\}
-        end virtual
+            end virtual
+            purge $\\#_struc_name
+            macro $\\#_struc_name _params& 
+            \\\{
+                \\\local _local
+                _local _struc_name _params
+            \\\}
+        \\}
         purge __struct
     \}
     match _struc_name, _name \{ irpv _struc_argument, _argument \\{ struc _struc_name _struc_argument \\} \}
     \{
 }
 
-ends fix } __struct
+ends  fix  } __struct
+ends_ fix \} __struct
+
+macro _assert_empty _variable* { match _, _variable \{ assert 0H \} }
 
 macro _itoa number*
 {
@@ -74,6 +86,12 @@ macro _itoa number*
     end repeat
 }
 
+struc _bitwise _mask*, _shift*
+{
+    .#_MASK     = ((_mask) shl .#_SHIFT)
+    .#_SHIFT    = (_shift)
+}
+
 struc string data*&
 {
     .: db data
@@ -88,15 +106,20 @@ macro align _power*, _padding:0H
     end while
 }
 
-_MAX_REAL_ADDRESS = ((0FFFFH shl 4H) + 0FFFFH)
-_CMOS_DISABLE_NMI = (1H shl 7H)
-_CMOS_SELECT = 070H
-_CMOS_PORT = 071H
-_RESET_CODE_BYTE = 00FH
-_BIOS_JUMP_EOI = 5H
-_BIOS_JUMP = 00AH ; without EOI
-_WARN_RESET_VECTOR = ((040H shl 4H) + 067H)
-_COPROCESSOR_ERROR = 0F0H
+_FIRST_MEGABYTE     = 0100000H
+_SYSTEM_PORT        = 092H
+_SYSTEM_FAST_RESET  = (1H shl 0H)
+_SYSTEM_ENABLE_A20  = (1H shl 1H)
+_LEGACY_TEXTMODE    = 00B8000H
+_MAX_REAL_ADDRESS   = ((0FFFFH shl 4H) + 0FFFFH)
+_CMOS_DISABLE_NMI   = (1H shl 7H)
+_CMOS_SELECT        = 070H
+_CMOS_PORT          = 071H
+_RESET_CODE_BYTE    = 00FH
+_BIOS_JUMP_EOI      = 5H
+_BIOS_JUMP          = 00AH ; without EOI
+_WARN_RESET_VECTOR  = ((040H shl 4H) + 067H)
+_COPROCESSOR_ERROR  = 0F0H
 
 _CR0_PE     = (1H shl 0H)
 _CR0_MP     = (1H shl 1H)
@@ -177,20 +200,22 @@ _DR6_BD = (1H shl 00DH)
 _DR6_BS = (1H shl 00EH)
 _DR6_BT = (1H shl 00FH)
 
+_DR6    = 0FFFF0FF0H
+_DR7    = (1H shl 00AH)
+
 _DEBUG_LEN_1B = 000B
 _DEBUG_LEN_2B = 001B
 _DEBUG_LEN_4B = 011B
 _DEBUG_LEN_8B = 010B
 
-_DEBUG_RW_INST_READ = 000B
-_DEBUG_RW_DATA_WRITE = 001B
-_DEBUG_RW_IO_READ_WRITE = 010B
-_DEBUG_RW_DATA_READ_WRITE = 011B
+_DEBUG_RW_INST_READ         = 000B
+_DEBUG_RW_DATA_WRITE        = 001B
+_DEBUG_RW_IO_READ_WRITE     = 010B
+_DEBUG_RW_DATA_READ_WRITE   = 011B
 
-macro __transform_struc [_item*] { forward struc _item _param& \{ _item _param \} }
-
-_TABLE_ENTRY_COUNT                  = 400H
+_TABLE_ENTRY_COUNT                  equ 400H ; workaround for preprocessor
 _PAE_TABLE_ENTRY_COUNT              = 200H
+_PML4_TABLE_ENTRY_COUNT             = 200H
 _PAE_PDPT_ENTRY_COUNT               = 4H
 _PAGING_LEVEL_BIT                   = ((bsf _TABLE_ENTRY_COUNT) shl 1H)
 _PAE_PAGING_LEVEL_BIT               = ((bsf _PAE_PDPT_ENTRY_COUNT) + ((bsf _PAE_TABLE_ENTRY_COUNT) shl 1H))
@@ -215,6 +240,10 @@ _PAGE_TABLE_MASK                    = 0003FF000H
 _PAE_PAGE_DIRECTORY_POINTER_MASK    = 0C0000000H
 _PAE_PAGE_DIRECTORY_MASK            = 03FE00000H
 _PAE_PAGE_TABLE_MASK                = 0001FF000H
+_PML4_SHIFT                         = 027H
+_PML4_LOWER_HALF                    = 0H
+_PML4_HIGHER_HALF                   = 100H
+_LONG_MODE_CANONICAL                = 0FFFF000000000000H
 
 _MEMORY_WB       = 0H
 _MEMORY_WT       = (_PE_PWT)
@@ -340,6 +369,7 @@ _STI        = 0FBH
 _HLT        = 0F4H
 _RDMSR      = 0320FH
 _WRMSR      = 0300FH
+_NOP        = 090H
 
 _PUSHA_EDI      = 000H
 _PUSHA_ESI      = 004H
@@ -371,12 +401,13 @@ _EXCEPTION_ALIGNEMENT_CHECK             = 011H
 _EXCEPTION_MACHINE_CHECK                = 012H
 _EXCEPTION_SMID                         = 013H
 _EXCEPTION_VIRTUALIZATION               = 014H
+_IDT_ENTRY                              equ 100H
 
-_IRET_EIP   = 000H
-_IRET_CS    = 004H
-_IRET_FLAGS = 008H
-_IRET_ESP   = 00CH
-_IRET_SS    = 010H
+_IRET_EIP       = 000H
+_IRET_CS        = 004H
+_IRET_EFLAGS    = 008H
+_IRET_ESP       = 00CH
+_IRET_SS        = 010H
 
 _EFLAGS         = (_EFLAGS_IF or _EFLAGS_RSVD)
 _EFLAGS_CF      = (1H shl 0H)
@@ -397,6 +428,15 @@ _EFLAGS_AC      = (1H shl 012H)
 _EFLAGS_VIF     = (1H shl 013H)
 _EFLAGS_VIP     = (1H shl 014H)
 _EFLAGS_CPUID   = (1H shl 015H)
+
+_EAX = 0H
+_ECX = 1H
+_EDX = 2H
+_EBX = 3H
+_ESP = 4H
+_EBP = 5H
+_ESI = 6H
+_EDI = 7H
 
 _CPUID_LEAF_PROCESSOR_INFO      = 1H
 _CPUID_LEAF_EXTEND_FEATURE      = 7H
@@ -435,6 +475,7 @@ _CPUID_EDX_PAT          = (1H shl 010H)
 _CPUID_EDX_PSE36        = (1H shl 011H)
 _CPUID_EDX_CLFLUSH      = (1H shl 013H)
 _CPUID_EDX_NX           = (1H shl 014H)
+_CPUID_EDX_ACPI         = (1H shl 016H)
 _CPUID_EDX_MMX          = (1H shl 017H)
 _CPUID_EDX_FXSR         = (1H shl 018H)
 _CPUID_EDX_SSE          = (1H shl 019H)
@@ -460,6 +501,11 @@ _CPUID_ECX_PKS          = (1H shl 01FH)
 _SYSENTER_CS_MSR    = 174H
 _SYSENTER_ESP_MSR   = 175H
 _SYSENTER_EIP_MSR   = 176H
+
+_STAR               = 0C0000081H
+_LSTAR              = 0C0000082H
+_CSTAR              = 0C0000083H
+_SFMASK             = 0C0000084H
 
 _POWER_ON_RESTART_ADDRESS           = 0FFFFFFF0H
 _SM_BASE                            = 30000H
@@ -533,12 +579,33 @@ _DEFAULT_LOCAL_APIC     = 0FEE00000H
 _DEFAULT_IO_APIC        = 0FEC00000H
 
 _APIC_DELIVERY_FIXED    = (000B shl 8H)
+_APIC_DELIVERY_LOWEST   = (001B shl 8H)
 _APIC_DELIVERY_SMI      = (010B shl 8H)
 _APIC_DELIVERY_NMI      = (100B shl 8H)
 _APIC_DELIVERY_INIT     = (101B shl 8H)
 _APIC_DELIVERY_EXTINT   = (111B shl 8H)
 _APIC_LEVEL_TRIGGER     = (1H shl 00FH)
 _APIC_POLARITY_LOW      = (1H shl 00DH)
+
+_APIC_MASK              = (1H shl 010H)
+
+_XAPIC_DESTINATION      _bitwise 0FFH, 038H
+;_X2APIC_DESTINATION     _bitwise 0FFH, 038H
+
+_XAPIC_MESSAGE_BROADCAST    = 0FFH
+_X2APIC_MESSAGE_BROADCAST   = 0FFFFH
+
+_TPR_HIGHEST        = 0FFH
+_TPR_LOWEST         = 0H
+
+_ESR_ILLEGAL_ADDRESS        = (1H shl 7H)
+_ESR_RECEIVE_ILLEGAL_VECTOR = (1H shl 6H)
+_ESR_SEND_ILLEGAL_VECTOR    = (1H shl 5H)
+_ESR_REDIRECTIBLE_IPI       = (1H shl 4H) ; only x2APIC
+_ESR_RECEIVE_ACCEPT_ERROR   = (1H shl 3H)
+_ESR_SEND_ACCEPT_ERROR      = (1H shl 2H)
+_ESR_RECEIVE_CHECKSUM_ERROR = (1H shl 1H)
+_ESR_SEND_CHECKSUM_ERROR    = (1H shl 0H)
 
 ; LOCAL APIC
 _IA32_APIC_BASE     = 01BH
@@ -547,9 +614,7 @@ _APIC_BASE_EXTD     = (1H shl 00AH)
 _APIC_BASE_EN       = (1H shl 00BH)
 _APIC_BASE_ADDRESS  = (1H shl 00CH)
 
-_LOCAL_APIC_BASE_MSR                = 800H
 _LOCAL_APIC_ID_REGISTER             = 020H
-;_LOCAL_APIC_ID_REGISTER_MSR     = (_LOCAL_APIC_BASE_MSR + 2H)
 _LOCAL_APIC_VERSION_REGISTER        = 030H
 _TASK_PRIORITY_REGISTER             = 080H
 _ARBITRATION_PRIORITY_REGISTER      = 090H
@@ -559,9 +624,12 @@ _REMOTE_READ_REGISTER               = 0C0H
 _LOGICAL_DESTINATION_REGISTER       = 0D0H
 _DESTINATION_FORMAT_REGISTER        = 0E0H
 _SPURIOUS_INTERRUPT_VECTOR_REGISTER = 0F0H
-rept 8H i:1H { _IN_SERVICE_REGISTER_#i = (100H + ((i - 1H) shl 4H)) }
-rept 8H i:1H { _TRIGGER_MODE_REGISTER_#i = (180H + ((i - 1H) shl 4H)) }
-rept 8H i:1H { _INTERRUPT_REQUEST_REGISTER_#i = (200H + ((i - 1H) shl 4H)) }
+rept 8H i:1H
+{
+    _IN_SERVICE_REGISTER_#i         = (100H + ((i - 1H) shl 4H))
+    _TRIGGER_MODE_REGISTER_#i       = (180H + ((i - 1H) shl 4H))
+    _INTERRUPT_REQUEST_REGISTER_#i  = (200H + ((i - 1H) shl 4H))
+}
 _ERROR_STATUS_REGISTER              = 280H
 _LVT_CMC                            = 2F0H
 _INTERRUPT_COMMAND_REGISTER_LOW     = 300H
@@ -571,9 +639,29 @@ _LVT_THERMAL_SENSOR                 = 330H
 _LVT_PERF_COUNTER_OVERFLOW          = 340H
 _LVT_LINT0                          = 350H
 _LVT_LINT1                          = 360H
+_LVT_ERROR                          = 370H
 _TIMER_INITIAL_COUNT_REGISTER       = 380H
 _TIMER_CURRENT_COUNT_REGISTER       = 390H
 _TIMER_DIVIDE_CONFIG_REGISTER       = 3E0H
+
+_LOCAL_APIC_BASE_MSR                = 800H
+_SELF_IPI_MSR                       = 03FH
+_X2APIC_MSR_SHIFT                   = 4H
+_INTERRUPT_COMMAND_REGISTER_MSR     = (_INTERRUPT_COMMAND_REGISTER_LOW shr _X2APIC_MSR_SHIFT)
+irp _kind*, _LOCAL_APIC_ID_REGISTER,_LOCAL_APIC_VERSION_REGISTER,_TASK_PRIORITY_REGISTER,\
+        _ARBITRATION_PRIORITY_REGISTER, _PROCESSOR_PRIORITY_REGISTER,_LOCAL_EOI_REGISTER,_REMOTE_READ_REGISTER,\
+        _LOGICAL_DESTINATION_REGISTER,_SPURIOUS_INTERRUPT_VECTOR_REGISTER,_ERROR_STATUS_REGISTER,_LVT_CMC,\
+        _LVT_TIMER,_LVT_THERMAL_SENSOR,_LVT_PERF_COUNTER_OVERFLOW,_LVT_LINT0,_LVT_LINT1,\
+        _LVT_ERROR,_TIMER_INITIAL_COUNT_REGISTER,_TIMER_CURRENT_COUNT_REGISTER,_TIMER_DIVIDE_CONFIG_REGISTER
+    { _kind#_MSR = ((_kind) shr _X2APIC_MSR_SHIFT) }
+rept 8H i:1H
+{
+    irp _kind*, _IN_SERVICE_REGISTER_,_TRIGGER_MODE_REGISTER_,_INTERRUPT_REQUEST_REGISTER_
+        \{ _kind\#i\#_MSR = ((_kind\#i) shr _X2APIC_MSR_SHIFT) \}
+}
+
+_DFR_CLUSTER_MODEL  = 0H
+_DFR_FLAT_MODEL     = (1H shl 01CH)
 
 ; IO APIC
 _INDEX_REGISTER                     = 000H
@@ -585,9 +673,14 @@ _IDENTIFICATION_REGISTER            = 000H
 _IO_APIC_VERSION_REGISTER           = 001H
 _IO_APIC_VERSION_MASK               = 0FFH
 _IO_APIC_VERSION_PRQ                = (1H shl 00FH)
-_IO_APIC_VERSION_IRQ_RT_MASK        = 0FFH
-_IO_APIC_VERSION_IRQ_RT_SHIFT       = 010H
+_IO_APIC_VERSION_IRQ_RT             _bitwise 0FFH, 010H
+_IO_APIC_HANDLE_PIN                 equ 018H
 _REDIRECTION_TABLE_BASE             = 010H
+rept _IO_APIC_HANDLE_PIN i:0H
+{
+    _IO_APIC_RT_LOW_#i      = (_REDIRECTION_TABLE_BASE + ((i) shl 1H))
+    _IO_APIC_RT_HIGH_#i     = ((_REDIRECTION_TABLE_BASE + ((i) shl 1H)) + 1H)
+}
 
 _LVT_LINT_VECTOR_MASK       = 0FFH
 _LVT_LINT_DELIVERY_FIXED    = (000B shl 8H)
@@ -622,12 +715,11 @@ _ICR_ALL_INCLUDING_SELF         = (010B shl 012H)
 _ICR_ALL_EXCLUDING_SELF         = (011B shl 012H)
 _ICR_LEVEL_ASSERT               = (1H shl 00EH)
 
-_APIC_VERSION_MASK              = 0FFH
-_APIC_VERSION_LVT_SHIFT         = 010H
-_APIC_VERSION_LVT_MASK          = 0FFH
+_APIC_VERSION                   _bitwise 0FFH, 0H
+_APIC_VERSION_LVT               _bitwise 0FFH, 010H
 _APIC_VERSION_DEOI              = (1H shl 018H)
 
-_SPURIOUS_VECTOR_MASK           = 0FFH
+_SPURIOUS_VECTOR                _bitwise 0FFH, 0H
 _SPURIOUS_APIC_ENABLE           = (1H shl 8H)
 _SPURIOUS_EOI_BROADCAST_DISABLE = (1H shl 00CH)
 
@@ -637,6 +729,11 @@ rept 010H i:0H
     _WD_#i = (1H shl (((i) * 2H) + 1H))
 }
 _IA32_PKRS = 6E1H
+
+_IA32_THERM_CONTROL     = 19AH
+_IA32_CLOCK_MODULATION  = _IA32_THERM_CONTROL
+_IA32_THERM_INTERRUPT   = 19BH
+_IA32_THERM_STATUS      = 19CH
 
 _IA32_MISC_ENABLE               = 1A0H
 _MISC_FAST_STRING_ENABLE        = (1H shl 0H)
@@ -783,7 +880,38 @@ _FXSAVE_XMM6            = 100H
 _FXSAVE_XMM7            = 110H
 _FXSAVE_TOTAL           = 200H
 
-_UMIP_ALLOW     = 0H    
+_PCI_ADDRESS            = 00CF8H
+_PCI_DATA               = 00CFCH
+_PCI_HEADER_DEVICE      = 0H
+_PCI_HEADER_PCI_PCI     = 1H
+_PCI_HEADER_PCI_CARDBUS = 2H
+
+_PCI_ENABLE         = (1H shl 01FH)
+_PCI_BUS            _bitwise 0FFH, 010H
+_PCI_DEVICE         _bitwise 11111B, 00BH
+_PCI_FUNCTION       _bitwise 111B, 8H
+_PCI_OFFSET         _bitwise 0FFH, 0H
+
+_PCI_VENDOR_INVALID = 0FFFFH
+_INTEL_VENDOR       = 08086H
+_AMD_VENDOR         = 01022H
+
+_CLASS_MASS_STORAGE = 1H
+_CLASS_NETWORK      = 2H
+_CLASS_DISPLAY      = 3H
+_CLASS_MULTIMEDIA   = 4H
+_CLASS_MEMORY       = 5H
+_CLASS_INPUT        = 9H
+_CLASS_PROCESSOR    = 00BH
+_CLASS_SERIAL_BUS   = 00CH
+
+_BIST_COMPLETION    _bitwise 01111B, 0H
+_BIST_START         = (1H shl 6H)
+_BIST_CAPABLE       = (1H shl 7H)
+_BIST_SUCCESS       = 0H
+
+_UMIP_ALLOW     = 0H
+_VMX_ALLOW      = 0H
 
 _ROOT_UID       = 0H
 _GUEST_UID      = 1H
@@ -791,30 +919,47 @@ _SCHEDULER_PID  = 0H
 _INIT_PID       = 1H
 _PORT_AVAILABLE = 010000H
 
-define _last_table
-macro page_table _name*, _extension:0H
+macro _PT_null      { dd _PE_NULL }
+macro _PAE_PT_null  { dq _PE_NULL }
+
+macro _PT_pe _address*, _flags*
+{
+    assert  (((_flags) >= 0H) & (((_flags) and (not _PAE_XD)) <= 1FFH))
+    assert  (~((_address) and (_PAGE_FRAME_SIZE - 1H)))
+    dd      ((_address) or (_flags))
+}
+
+macro _PAE_PT_pe _address*, _flags*
+{
+    _PT_pe  _address, _flags
+    dd      (((_address) shr 020H) or ((_flags) shr 020H))
+}
+
+irp _kind, PT_null,PAE_PT_null
+{
+    struct _kind
+        _\#_kind
+    ends_
+}
+
+irp _kind, PT_pe,PAE_PT_pe
+{
+    struct _kind _address*, _flags*
+        _\#_kind _address, _flags
+    ends_
+}
+
+define _npgtlb
+macro _page_table _name*, _extension
 {
     local _target, _pae, _limit
     _target = 0H
-    _pae = (_extension)
-    if (_pae)
-        _limit = _PAE_TABLE_ENTRY_COUNT
-    else
-        _limit = _TABLE_ENTRY_COUNT
-    end if
-    
-    macro _page_table_write _value*
-    \{
-        if (_pae)
-            dq (_value)
-        else
-            dd (_value)
-        end if
-    \}
+    match =pae,_extension \{ _limit = _PAE_TABLE_ENTRY_COUNT \}
+    match,_extension \{ _limit = _TABLE_ENTRY_COUNT \}
 
-    macro _page_table_update _skip
+    macro _update _skip
     \{
-        local _many
+        \local _many
         match _, _skip
         \\{
             _many = (_skip)
@@ -823,7 +968,8 @@ macro page_table _name*, _extension:0H
             end if
             assert ((_many) < _limit)
             repeat ((_many) - (_target))
-                _page_table_write _PE_NULL
+                match =pae,_extension \\\{ _PAE_PT_null \\\}
+                match,_extension \\\{ _PT_null \\\}
             end repeat
             _target = (_many)
         \\}
@@ -833,23 +979,21 @@ macro page_table _name*, _extension:0H
 
     macro PT_null _skip
     \{
-        _page_table_update _skip
-        _page_table_write _PE_NULL
+        _update _skip
+        match =pae,_extension \\{ _PAE_PT_null \\}
+        match,_extension \\{ _PT_null \\}
     \}
     
     macro PT_pe _address*, _flags*, _skip
     \{
-        _page_table_update _skip
-        assert (((_flags) >= 0H) & ((_flags and (not _PAE_XD)) <= 1FFH))
-        assert (~((_address) and (_PAGE_FRAME_SIZE - 1H)))
-        _page_table_write ((_address) or (_flags))
+        _update _skip
+        match =pae,_extension \\{ _PAE_PT_pe _address, _flags \\}
+        match,_extension \\{ _PT_pe _address, _flags \\}
     \}
 
-    __transform_struc PT_null, PT_pe
-
     align (_PAGE_FRAME_SIZE)
-    match _, _last_table \{ assert 0H \}
-    define _last_table _name
+    _assert_empty _npgtlb
+    define _npgtlb _name
     _name:
 }
 
@@ -883,87 +1027,119 @@ _386_INTERRUPT_GATE = 00EH
 _386_TRAP_GATE = 00FH
 
 _DE_L = (2H shl 4H) ; long mode bit
-_DE_D = (4H shl 4H) ; default bit
-_DE_B = (4H shl 4H) ; big bit
+_DE_D = (4H shl 4H) ; default bit (code segment)
+_DE_B = (4H shl 4H) ; big bit (stack segment)
 _DE_G = (8H shl 4H) ; granularity bit
 
-struct TSS_16 _link*, _sp0*, _ss0*, _sp1*, _ss1*, _sp2*, _ss2*, _ip*, _flag*, _ax*, _cx*, _dx*, _bx*, _sp*, _bp*, _si*, _di*, _es*, _cs*, _ss*, _ds*, _ldt*
-    .link:  dw _link
-    .sp0:   dw _ss0
-    .ss0:   dw _sp0
-    .sp1:   dw _sp1
-    .ss1:   dw _ss1
-    .sp2:   dw _sp2
-    .ss2:   dw _ss2
-    .ip:    dw _ip
-    .flag:  dw _flag
-    .ax:    dw _ax
-    .cx:    dw _cx
-    .dx:    dw _dx
-    .bx:    dw _bx
-    .sp:    dw _sp
-    .bp:    dw _bp
-    .si:    dw _si
-    .di:    dw _di
-    .es:    dw _es
-    .cs:    dw _cs
-    .ds:    dw _ds
-    .ss:    dw _ss
-    .ldt:   dw _ldt
+struct _TSS_16 _link*, _sp0*, _ss0*, _sp1*, _ss1*, _sp2*, _ss2*, _ip*, _flag*, _ax*, _cx*, _dx*, _bx*,\
+        _sp*, _bp*, _si*, _di*, _es*, _cs*, _ss*, _ds*, _ldt*
+    .link:  dw (_link)
+    .sp0:   dw (_ss0)
+    .ss0:   dw (_sp0)
+    .sp1:   dw (_sp1)
+    .ss1:   dw (_ss1)
+    .sp2:   dw (_sp2)
+    .ss2:   dw (_ss2)
+    .ip:    dw (_ip)
+    .flag:  dw (_flag)
+    .ax:    dw (_ax)
+    .cx:    dw (_cx)
+    .dx:    dw (_dx)
+    .bx:    dw (_bx)
+    .sp:    dw (_sp)
+    .bp:    dw (_bp)
+    .si:    dw (_si)
+    .di:    dw (_di)
+    .es:    dw (_es)
+    .cs:    dw (_cs)
+    .ds:    dw (_ds)
+    .ss:    dw (_ss)
+    .ldt:   dw (_ldt)
 ends
 
-struct TSS_32 _link*, _esp0*, _ss0*, _esp1*, _ss1*, _esp2*, _ss2*, _cr3*, _eip*, _eflag*, _eax*, _ecx*, _edx*, _ebx*,\
+struct _TSS_32 _link*, _esp0*, _ss0*, _esp1*, _ss1*, _esp2*, _ss2*, _cr3*, _eip*, _eflag*, _eax*, _ecx*, _edx*, _ebx*,\
         _esp*, _ebp*, _esi*, _edi*, _es*, _cs*, _ss*, _ds*, _fs*, _gs*, _ldt*, _trap*, _iomap*
-    .link:  dw _link
+    assert  (((_trap) >= 0H) & ((_trap) <= 1H))
+    .link:  dw (_link)
             dw 0H
-    .esp0:  dd _esp0
-    .ss0:   dw _ss0
+    .esp0:  dd (_esp0)
+    .ss0:   dw (_ss0)
             dw 0H
-    .esp1:  dd _esp1
-    .ss1:   dw _ss1
+    .esp1:  dd (_esp1)
+    .ss1:   dw (_ss1)
             dw 0H
-    .esp2:  dd _esp2
-    .ss2:   dw _ss2
+    .esp2:  dd (_esp2)
+    .ss2:   dw (_ss2)
             dw 0H
-    .cr3:   dd _cr3
-    .eip:   dd _eip
-    .eflag: dd _eflag
-    .eax:   dd _eax
-    .ecx:   dd _ecx
-    .edx:   dd _edx
-    .ebx:   dd _ebx
-    .esp:   dd _esp
-    .ebp:   dd _ebp
-    .esi:   dd _esi
-    .edi:   dd _edi
-    .es:    dw _es
+    .cr3:   dd (_cr3)
+    .eip:   dd (_eip)
+    .eflag: dd (_eflag)
+    .eax:   dd (_eax)
+    .ecx:   dd (_ecx)
+    .edx:   dd (_edx)
+    .ebx:   dd (_ebx)
+    .esp:   dd (_esp)
+    .ebp:   dd (_ebp)
+    .esi:   dd (_esi)
+    .edi:   dd (_edi)
+    .es:    dw (_es)
             dw 0H
-    .cs:    dw _cs
+    .cs:    dw (_cs)
             dw 0H
-    .ss:    dw _ss
+    .ss:    dw (_ss)
             dw 0H
-    .ds:    dw _ds
+    .ds:    dw (_ds)
             dw 0H
-    .fs:    dw _fs
+    .fs:    dw (_fs)
             dw 0H
-    .gs:    dw _gs
+    .gs:    dw (_gs)
             dw 0H
-    .ldt:   dw _ldt
+    .ldt:   dw (_ldt)
             dw 0H
-    .trap:  dw _trap
-    .iomap: dw _iomap
+    .trap:  dw (_trap)
+    .iomap: dw (_iomap)
 ends
 
-;__transform_struc TSS_16, TSS_32
+struct _TSS_64 _rsp0*, _rsp1*, _rsp2*, _ist1*, _ist2*, _ist3*, _ist4*, _ist5*, _ist6*, _ist7*, _iomap*
+    dd      0H
+    .rsp0:  dq (_rsp0)
+    .rsp1:  dq (_rsp1)
+    .rsp2:  dq (_rsp2)
+    dq      0H
+    .ist1:  dq (_ist1)
+    .ist2:  dq (_ist2)
+    .ist3:  dq (_ist3)
+    .ist4:  dq (_ist4)
+    .ist5:  dq (_ist5)
+    .ist6:  dq (_ist6)
+    .ist7:  dq (_ist7)
+    dq      0H
+    dw      0H
+    .iomap: dw (_iomap)
+ends
+assert (_TSS_64.sizeof = _TSS_32.sizeof)
 
 struct DT_null
     dq 0H
 ends
 
+struct DT_dte _flag*, _access*, _offset*, _limit*
+    assert      (((_limit) >= 0H) & ((_limit) <= 00FFFFFH))
+    assert      (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
+    .limit_1:   dw ((_limit) and 0FFFFH)
+    .offset_1:  dw ((_offset) and 0FFFFH)
+    .offset_2:  db (((_offset) shr 010H) and 0FFH)
+    .access:    db ((_access) or _DE_DESCRIPTOR)
+    .limit_2:
+    .flag:      db ((_flag) or ((_limit) shr 010H))
+    .offset_3:  db ((_offset) shr 018H)
+ends
+
+; Task,Call,Interrupt,Trap
 struct DT_gte _access*, _wdcnt*, _select*, _offset*
-    assert (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
-    assert (((_select) >= 0H) & ((_select) <= 0FFFFH))
-    assert (((_wdcnt) >= 0H) & ((_wdcnt) <= 01FH))
+    assert      (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
+    assert      (((_select) >= 0H) & ((_select) <= 0FFFFH))
+    assert      (((_wdcnt) >= 0H) & ((_wdcnt) <= 01FH))
     .offset_1:  dw ((_offset) and 0FFFFH)
     .select:    dw (_select)
     .wdcnt:     db (_wdcnt)
@@ -971,82 +1147,109 @@ struct DT_gte _access*, _wdcnt*, _select*, _offset*
     .offset_2:  dw ((_offset) shr 010H)
 ends
 
-macro descriptor_table _name*, _local:0H
+struct Long_DT_gte _access*, _select*, _offset*
+    .legacy     DT_gte (_access), 0H, (_select), ((_offset) and 0FFFFFFFFH)
+    .offset_3:  dd ((_offset) shr 020H)
+    .reserved:  dd 0H
+ends
+
+; TSS,LDT
+struct DT_ste _access*, _offset*, _limit*
+    assert      (((_limit) >= 0H) & ((_limit) <= 00FFFFFH))
+    assert      (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
+    .limit_1:   dw ((_limit) and 0FFFFH)
+    .offset_1:  dw ((_offset) and 0FFFFH)
+    .offset_2:  db (((_offset) shr 010H) and 0FFH)
+    .access:    db ((_access) and (not _DE_DESCRIPTOR))
+    .limit_2:   db ((_limit) shr 010H)
+    .offset_3:  db ((_offset) shr 018H)
+ends
+
+struct Long_DT_ste _access*, _offset*, _limit*
+    .legacy     DT_ste (_access), ((_offset) and 0FFFFFFFFH), (_limit)
+    .offset_4:  dd ((_offset) shr 020H)
+    .reserved:  dd 0H
+ends
+
+macro _load_descriptor_table _instruction*, _table*
+{
+    pushd (_table)
+    pushw (_table#.size)
+    l#_instruction fword [esp]
+    add esp, 6H
+}
+
+macro _descriptor_table _name*, _local:0H
 {
     local _selector
     _selector = 0H
 
-    macro _descriptor_table_retreive _target*
+    macro _retreive _target*, _increment:1H
     \{
         local _mask
         _mask = 0H
-        _target:
         if (_local)
             _mask = _TI
         end if
-        _target\#.selector = (((_selector) * 8H) or _mask)
-        _selector = ((_selector) + 1H)
+        _target\#.selector = (((_selector) shl 3H) or _mask)
+        _selector = ((_selector) + (_increment))
     \}
 
-    struc DT_null
+    irp _kind, null,dte,gte,ste
     \{
-        _descriptor_table_retreive .
-        dq 0H
+        struc DT_\#_kind _param&
+        \\{
+            _retreive .
+            . DT_\\#_kind _param
+        \\}
     \}
 
-    struc DT_dte _flag*, _access*, _offset*, _limit*
+    irp _kind, gte,ste
     \{
-        _descriptor_table_retreive .
-        assert (((_limit) >= 0H) & ((_limit) <= 00FFFFFH))
-        assert (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
-        .limit_1: dw ((_limit) and 0FFFFH)
-        .offset_1: dw ((_offset) and 0FFFFH)
-        .offset_2: db (((_offset) shr 010H) and 0FFH)
-        .access: db ((_access) or _DE_DESCRIPTOR)
-        .limit_2:
-        .flag: db ((_flag) or ((_limit) shr 010H))
-        .offset_3: db ((_offset) shr 018H)
+        struc Long_DT_\#_kind _param&
+        \\{
+            _retreive ., 2H
+            . Long_DT_\\#_kind _param
+        \\}
     \}
-
-    struc DT_gte _access*, _wdcnt*, _select*, _offset*
-    \{
-        _descriptor_table_retreive .
-        assert (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
-        assert (((_select) >= 0H) & ((_select) <= 0FFFFH))
-        assert (((_wdcnt) >= 0H) & ((_wdcnt) <= 01FH))
-        .offset_1: dw ((_offset) and 0FFFFH)
-        .select: dw (_select)
-        .wdcnt: db (_wdcnt)
-        .access: db ((_access) and (not _DE_DESCRIPTOR))
-        .offset_2: dw ((_offset) shr 010H)
-    \}
-
-    struc DT_ste _access*, _offset*, _limit*
-    \{
-        _descriptor_table_retreive .
-        assert (((_limit) >= 0H) & ((_limit) <= 00FFFFFH))
-        assert (((_offset) >= 0H) & ((_offset) <= 0FFFFFFFFH))
-        .limit_1: dw ((_limit) and 0FFFFH)
-        .offset_1: dw ((_offset) and 0FFFFH)
-        .offset_2: db (((_offset) shr 010H) and 0FFH)
-        .access: db ((_access) and (not _DE_DESCRIPTOR))
-        .limit_2: db ((_limit) shr 010H)
-        .offset_3: db ((_offset) shr 018H)
-    \}
-
-;    __transform_struc DT_null, DT_dte, DT_gte, DT_ste
 
     align (8H)
-;    psegment _name
-    _name:
+    _psegment _name
 }
 
-_context = ($)
+define _nusrcd
+macro _user_code _program*
+{
+    virtual at _USER_CODE_VIRTUAL
+    _assert_empty _nusrcd
+    define _nusrcd _program
+    _program::
+}
+
+define _nistlb
+macro _interrupt_service_table _table*
+{
+    local _vector
+    _vector = 0H
+    macro _ist _handler*, _ignore
+    \{
+        dd (_handler)
+        match,_ignore
+            \\{ _handler\#.vector = (_vector) \\}
+        _vector = (_vector) + 1H
+    \}
+
+    _assert_empty _nistlb
+    define _nistlb _table
+    _table:
+}
+
+_context = 0H
 define _restore
-macro psegment _name*, _mode:use32
+macro _psegment _name*, _mode:use32
 {
     local _base
-    _base = ($)
+    _base = $
     match,_restore \{ _context = (_base) \}
     match _, _restore \{ _context = (_context + (_base)) \}
     define _restore _base,_name
@@ -1073,24 +1276,41 @@ macro end _continue*
 {
     local _missed
     define _missed
-    match =psegment, _continue \{ define _missed psegment \}
-    match =descriptor_table, _continue \{ define _missed descriptor_table \}
-    match =page_table, _continue \{ define _missed page_table \}
+    match =_psegment, _continue \{ define _missed _psegment \}
+    match =_descriptor_table, _continue \{ define _missed _descriptor_table \}
+    match =_interrupt_service_table, _continue \{ define _missed _interrupt_service_table \}
+    match =_page_table, _continue \{ define _missed _page_table \}
+    match =_user_code, _continue \{ define _missed _user_code \}
     match _, _missed
     \{
-        match =descriptor_table, _
+        match =_descriptor_table, _
         \\{
-            restruc DT_null, DT_dte, DT_gte, DT_ste
-            purge DT_null, DT_dte, DT_gte, DT_ste, _descriptor_table_retreive
+            restruc DT_null, DT_dte, DT_gte, DT_ste, Long_DT_gte, Long_DT_set
+            purge _retreive
         \\}
-        match =page_table, _
+        match =_interrupt_service_table, _
         \\{
-            if (($ = _last_table) | ($ and (_PAGE_FRAME_SIZE - 1H)))
+            match _table, _nistlb
+            \\\{
+                _table\\\#_end:
+                _table\\\#.size = (($ - _table) shr 2H)
+            \\\}
+            restore _nistlb
+            purge _ist
+        \\}
+        match =_page_table, _
+        \\{
+            if ((_npgtlb = $) | ($ and (_PAGE_FRAME_SIZE - 1H)))
                 PT_null -1H
             end if
-            restore _last_table
-            restruc PT_null, PT_pe
-            purge PT_null, PT_pe, _page_table_update, _page_table_write
+            restore _npgtlb
+            purge _update, PT_null, PT_pe
+        \\}
+        match =_user_code, _
+        \\{
+            match _program, _nusrcd \\\{ _program\\\#.sizeof = ($ - $$) \\\}
+            end virtual
+            restore _nusrcd
         \\}
         match _base=,_name, _restore
         \\{
@@ -1177,12 +1397,6 @@ macro _salc
     sahf
 }
 
-struc _bitwise _mask*, _shift*
-{
-    .#_MASK     = ((_mask) shl .#_SHIFT)
-    .#_SHIFT    = (_shift)
-}
-
 macro _debugs _list*&
 {
     local _address
@@ -1193,4 +1407,3 @@ macro _debugs _list*&
         _itoa _address
     \}
 }
-

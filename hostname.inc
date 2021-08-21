@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_hostname::
+_user_code _hostname
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -28,5 +27,4 @@ _hostname_start_exit:
     int 030H
 _hostname_value string "CP/M2 Workstation", 00AH
 _hostname_invalid string "hostname invalid usage", 00AH
-_hostname.sizeof = ($ - $$)
-end virtual
+end _user_code

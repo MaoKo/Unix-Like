@@ -166,7 +166,7 @@ _handle_signal_exit:
     pop ebp edi esi
     ret
 _signal_default_table:
-    dd 0H ; signal begin with 1H
+    dd _panic ; signal begin with 1H
     dd _default_action_term
     dd _default_action_term
     dd _default_action_core

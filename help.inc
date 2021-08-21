@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_help::
+_user_code _help
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -52,5 +51,5 @@ _help_command string\
     "shutdown           - shutdown the machine", 00AH,\
     "exit               - exit the shell", 00AH
 _help_invalid string "help invalid usage", 00AH
-_help.sizeof = ($ - $$)
-end virtual
+end _user_code
+
