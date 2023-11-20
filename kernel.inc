@@ -553,12 +553,12 @@ struct _socket _filde*, _lock*, _bind*, _port*, _buffer*, _cursor*, _stand*, _pr
     .list       _linked (_prev), (_next)
 ends
 
-enum SIGHUP:1H, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGIOT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1, SIGSEGV, SIGUSR2,\
-    SIGPIPE, SIGALRM, SIGTERM, SIGSTKFLT, SIGCHLD, SIGCONT, SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU, _SIGNALS:&
+include "signal_enum.inc"
+
 _PROCESS_SIGNALS_BITMAP = ((_SIGNALS + (_BITMAP_UNIT - 1H)) and (not (_BITMAP_UNIT - 1H)))
 _PORT_RANGE = (_PORT_AVAILABLE shr 3H)
 
-enum _PROCESS_RUN, _PROCESS_ZOMBIE, _PROCESS_SLEEP, _PROCESS_STOP, _PROCESS_DEAD
+enum _PROCESS_RUN, _PROCESS_ZOMBIE, _PROCESS_SLEEP, _PROCESS_STOP, _PROCESS_DEAD, _PROCESS_THREAD
 struct _process _state*, _pid*, _uid*, _pgid*, _sid*, _tid*, _mnbrk*, _break*, _ustck*, _mapping*, _parent*, _childs*, _socket*, _sockno*, _sesdesc*, _grpdesc*,\
         _siblings_prev*, _siblings_next*, _pgroup_prev*, _pgroup_next*, _stackpf*, _pfcount*, _sigcnt*, _signst*, _sigstp*, _tty*, _waitable*, _jststp*, _jstcnt*,\
         _vm86*, _vmflgs*, _lwreal*, _hgreal*, _mapreal*, _lckreal*, _vif*, _vip*, _extcde*, _extsig*, _fground_prev*, _fground_next*, _priority*, _increment*, _intprec*, _channel*,\
@@ -1282,6 +1282,7 @@ _cpuid_detection_extended:
     ja _cpuid_detection_exit
     cpuid
     mov byte [esi+_cpuid.maxphyaddr], al
+    clc
 _cpuid_detection_exit:
     pop ebp edi edx ecx ebx
     ret
@@ -10169,10 +10170,13 @@ include "server.inc"
 include "sockpoc.inc"
 include "sqrt.inc"
 include "md5.inc"
+include "bomb.inc"
+include "invopcode.inc"
+include "showpid.inc"
+include "print.inc"
 include "shell.inc"
 include "login.inc"
 include "init.inc"
-include "bomb.inc"
 include "vdso.inc"
 
 _abc:

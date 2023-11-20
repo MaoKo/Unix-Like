@@ -26,7 +26,7 @@ _help_exit:
     mov al, _SYSCALL_EXIT
     int 030H
 _help_command string\
-    "achiu-au, KFS version 1.0.3", 00AH,\
+    "achiu-au, KFS version 1.0.5", 00AH,\
     "To switch TTY enter CTRL+Fn or left/right window", 00AH,\
     "help               - display help", 00AH,\
     "copyright          - show the copyright", 00AH,\
@@ -36,16 +36,20 @@ _help_command string\
     "copy ""str""         - copy the string to the clipboard", 00AH,\
     " * to include "" in string, double it", 00AH,\
     "usertest           - test new stuff (segfault, undefined opcode ...)", 00AH,\
+    "invopcode          - show if signal invalid opcode works", 00AH,\
     "segvtest           - experiment a segmentation fault", 00AH,\
+    "bomb               - test fork bomb", 00AH,\
     "sigint             - use sigint to quit the program", 00AH,\
+    "showpid            - show parent and process pid", 00AH,\
     "sockpoc            - test the server - client idiom", 00AH,\
-    "sqrt               - simple routine to compute sqrt", 00AH,\
+    "sqrt               - simple routine to test if sse is present", 00AH,\
     "md5 hash           - hash input string to md5", 00AH,\
     "kill signal pid    - send the signal to the process", 00AH,\
     "uid                - show the current uid", 00AH,\
     "uname              - show the version of the OS", 00AH,\
     "hostname           - show the hostname", 00AH,\
     "history on/off     - enable/disable history", 00AH,\
+    "print str          - print in loop a string", 00AH,\
     "resolution x y     - try to change to resolution with the given value", 00AH,\
     "reboot             - reboot the machine", 00AH,\
     "shutdown           - shutdown the machine", 00AH,\

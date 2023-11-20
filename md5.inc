@@ -1,6 +1,5 @@
 
-virtual at _USER_CODE_VIRTUAL
-_md5::
+_user_code _md5
     xor eax, eax
     mov al, _SYSCALL_ARGCPY
     int 030H
@@ -16,8 +15,6 @@ _md5::
     mov ebx, (not 0H)
     jmp _md5_exit
 _md5_hash:
-    ;mov esi, (_USER_SHELL_ARGUMENT_VIRTUAL + 4H)
-
     xor eax, eax
     mov al, _SYSCALL_WRITE
     mov ebx, _TELETYPE_CURRENT
@@ -36,13 +33,8 @@ _md5_hash:
     int 030H
     xor eax, eax
     mov al, _SYSCALL_MD5
-
-    ;mov ebx, (_USER_SHELL_ARGUMENT_VIRTUAL + 4H)
-    ;mov ecx, ebp
-
-    ;mov ebx, _abcx
-    ;mov ecx, 0
-
+    mov ebx, (_USER_SHELL_ARGUMENT_VIRTUAL + 4H)
+    mov ecx, ebp
     lea edx, [esp-_MD5_DIGEST]
     int 030H
     xor eax, eax
@@ -63,15 +55,9 @@ _md5_exit:
     xor eax, eax
     mov al, _SYSCALL_EXIT
     int 030H
-
-;_md5_example string "The quick brown fox jumps over the lazy dog"
-
-;_abcx string ""
-
 _md5_head string "md5("""
 _md5_tail string """) = "
 _md5_invalid string "md5 invalid usage"
 _md5_newline: db 00AH
 _md5.sizeof = ($ - $$)
-end virtual
-
+end _user_code

@@ -1,2 +1,5 @@
 An educational Unix-Like Os.
 Try to mimic the first Unix implementation, back in the old day.
+build with fasm and grub 2.06
+./configure --target=x86_64 --disable-werror
+make

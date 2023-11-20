@@ -110,7 +110,7 @@ _shell_process_command:
     mov edi, (_SHELL_BUFFER_INTERNAL + _shell_aggregate.command.buffer)
     call _shell_skip_whitespace
     jz _shell_process_command_validate
- irp _kind*, help,copyright,uid,uname,shutdown,reboot,hostname,fg,bg,resolution,clear,sigint,usertest,segvtest,kill,sockpoc,sqrt,md5
+ irp _kind*, help,copyright,uid,uname,shutdown,reboot,hostname,fg,bg,resolution,clear,sigint,usertest,segvtest,kill,sockpoc,sqrt,md5,bomb,invopcode,showpid,print
  {
     mov eax, _shell_#_kind#.sizeof
     mov ebx, _#_kind#_payload
@@ -1056,7 +1056,15 @@ _shell_segvtest string "segvtest"
 
 _shell_sqrt string "sqrt"
 _shell_sockpoc string "sockpoc"
-_shell_md5 string "md"
+_shell_md5 string "md5"
+
+_shell_bomb string "bomb"
+
+_shell_invopcode string "invopcode"
+
+_shell_showpid string "showpid"
+
+_shell_print string "print"
 
 _shell_stopped_1 string "process stopped [PID "
 _shell_stopped_2 string "]"
@@ -1081,6 +1089,7 @@ _extract _kill
 _extract _uname
 _extract _hostname
 _extract _shutdown
+_extract _bomb
 _extract _reboot
 _extract _fg
 _extract _bg
@@ -1092,6 +1101,9 @@ _extract _segvtest
 _extract _sockpoc
 _extract _sqrt
 _extract _md5
+_extract _invopcode
+_extract _showpid
+_extract _print
 
 _shell.sizeof = ($ - $$)
 end virtual
