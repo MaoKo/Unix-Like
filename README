@@ -1,6 +1,26 @@
-An educational Unix-Like Os.
-Try to mimic the first Unix implementation, back in the old day.
-build with fasm and grub 2.06
-to build grub:
- - ./configure --target=x86_64 --disable-werror
- - make
+# Unix-Like OS
+
+An educational Unix-Like operating system, inspired by the early Unix implementations. This project aims to mimic the foundational features of Unix, focusing on user accounts, memory pagination, and essential OS functionalities, all built from scratch in assembly.
+
+## Features
+
+- Minimalist Unix-like environment
+- User account management
+- Memory pagination
+- Built with FASM (Flat Assembler) and GRUB 2.06
+
+## Getting Started
+
+### Prerequisites
+
+To build and run this OS, you will need:
+- **Flat Assembler (FASM)** for assembly language compilation
+- **GRUB 2.06** for bootloading
+
+### Building GRUB
+
+To configure and build GRUB 2.06 for this project, follow these steps:
+
+```bash
+./configure --target=x86_64 --disable-werror
+make
