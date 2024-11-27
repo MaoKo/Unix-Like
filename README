@@ -1,26 +1,31 @@
-# Unix-Like OS
+# **Unix-Like OS**
 
-An educational Unix-Like operating system, inspired by the early Unix implementations. This project aims to mimic the foundational features of Unix, focusing on user accounts, memory pagination, and essential OS functionalities, all built from scratch in assembly.
+Un système d'exploitation éducatif inspiré des premières implémentations de **Unix**.  
+Ce projet vise à reproduire les fonctionnalités fondamentales de Unix, notamment la gestion des comptes utilisateurs, la pagination mémoire, et les fonctionnalités essentielles d’un système d’exploitation, le tout développé entièrement en **assembleur**.
 
-## Features
+---
 
-- Minimalist Unix-like environment
-- User account management
-- Memory pagination
-- Built with FASM (Flat Assembler) and GRUB 2.06
+## **Fonctionnalités**
+- 🌐 **Environnement minimaliste de type Unix** : Interface simplifiée et fonctions essentielles.  
+- 👥 **Gestion des comptes utilisateurs** : Prise en charge de comptes de base avec des privilèges utilisateur simples.  
+- 🛠️ **Pagination mémoire** : Implémentation de mécanismes de gestion de mémoire pour une meilleure allocation et isolation.  
+- 💻 **Développement bas niveau** : Codé entièrement en assembleur avec **Flat Assembler (FASM)** et pris en charge par **GRUB 2.06** comme bootloader.
 
-## Getting Started
+---
 
-### Prerequisites
+## **Prérequis**
+Pour construire et exécuter ce système d’exploitation, vous aurez besoin de :  
+- **Flat Assembler (FASM)** : Pour compiler le code assembleur.  
+- **GRUB 2.06** : Pour le chargement du noyau.  
+- Un environnement Linux ou tout autre système prenant en charge la compilation GRUB et l’assemblage FASM.  
 
-To build and run this OS, you will need:
-- **Flat Assembler (FASM)** for assembly language compilation
-- **GRUB 2.06** for bootloading
+---
 
-### Building GRUB
+## **Installation et Compilation**
 
-To configure and build GRUB 2.06 for this project, follow these steps:
-
+### **1. Préparation de GRUB**
+Pour configurer et compiler GRUB 2.06 pour ce projet, suivez les étapes suivantes :  
 ```bash
 ./configure --target=x86_64 --disable-werror
 make
+```
